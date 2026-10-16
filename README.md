@@ -1,6 +1,6 @@
 # Flow Research — Crypto Market Observatory v0.5
 
-Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5.1 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
+Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5.2 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
 
 ## Implemented
 
@@ -15,7 +15,7 @@ Public crypto market research interface at https://phuongdinh92.github.io/flow-r
 
 ## Charts restored and added
 
-- 24H market bubbles, with area proportional to venue quote turnover. Shows up to 80 highest-turnover pairs on desktop or 24 on narrow screens; filtering applies before selection. The alternate scatter plots all usable pairs with price change and log10 USDT turnover.
+- 24H market bubbles, with area proportional to venue quote turnover. Shows up to 80 highest-turnover pairs on desktop or 24 on narrow screens; filtering applies before selection. Deterministic circle packing preserves area ratios without overlaps; small circles keep exact accessible tooltips and only show labels when space permits. The alternate scatter plots all usable pairs with price change and log10 USDT turnover.
 - Restored seven-day Binance taker-buy/price-change scatter, using broad closed-day summaries plus any newer on-demand histories. Coverage, history failures, and the latest closed UTC day are explicit. Bitget is excluded from this specific metric because its candle endpoint does not supply taker-buy quote volume.
 - Per-pair OHLC candles with quote-volume pane, daily aggressor buy-minus-sell bars over a separately scaled closing-price line, and cumulative aggressor delta (CVD). Windows 30/90/120 reset CVD to zero before the first displayed day.
 - `charts-core.js` validates units, source identity, UTC continuity, rollover freshness and retained summary arithmetic; `charts-view.js` renders accessible SVG with exact-value tooltips and keyboard/click navigation.
@@ -49,7 +49,7 @@ python collect_market.py --self-test
 python -m unittest test_flow
 ```
 
-The 13 adapter, 14 UI, 17 chart arithmetic, 11 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. Broad Binance daily collection checked all 511 available pairs: 489 had 31 continuous completed UTC days and 22 lacked sufficient history. Every retained record was reconciled against its raw response. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
+The 13 adapter, 14 UI, 17 chart arithmetic, 12 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. Broad Binance daily collection checked all 511 available pairs: 489 had 31 continuous completed UTC days and 22 lacked sufficient history. Every retained record was reconciled against its raw response. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
 
 Maintainers running the broad history collector need its pinned HTTP dependency. Website users do not need Python:
 

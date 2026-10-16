@@ -110,16 +110,54 @@
     if (!Array.isArray(points) || !points.length) return empty('Chưa có ticker hợp lệ để vẽ bong bóng.');
     if (points.some(p => !identity(p) || !finite(p.x) || !finite(p.y) || p.y <= 0)) return empty('Dữ liệu bong bóng không hợp lệ.');
     const selected = [...points].sort((a, b) => a.y === b.y ? a.key.localeCompare(b.key) : a.y > b.y ? -1 : 1).slice(0, 80);
-    const w = widthOf(width), cols = Math.max(2, Math.floor(w / 96)), cellW = w / cols, cellH = 100, rows = Math.ceil(selected.length / cols), h = rows * cellH + 12;
-    const maxVolume = selected[0].y, maxR = Math.min(cellW * 0.44, 44);
-    let svg = begin(w, h, 'Bong bóng biến động giá 24H theo cặp và sàn', 'Tối đa 80 cặp có giá trị giao dịch 24H cao nhất. Diện tích hình tròn tỷ lệ giá trị giao dịch 24H bằng USDT. Màu phản ánh biến động giá. Nhãn vẫn hiện khi diện tích quá nhỏ để thấy. Các ô cố định không chồng lên nhau.');
-    selected.forEach((p, i) => {
-      const cx = (i % cols + 0.5) * cellW, cy = Math.floor(i / cols) * cellH + cellH / 2;
-      const radius = maxR * Math.exp((Math.log(p.y) - Math.log(maxVolume)) / 2);
-      const content = '<circle class="chart-bubble" cx="' + coord(cx) + '" cy="' + coord(cy) + '" r="' + coord(radius) + '"/>' +
-        text(cx, cy - 11, short(p.base, 10), 'chart-bubble-label') + text(cx, cy + 4, VENUES[p.sourceId], 'chart-bubble-source') + text(cx, cy + 20, percent(p.x), 'chart-bubble-change');
+    const w = widthOf(width), h = w < 600 ? Math.max(340, Math.min(520, w * 1.05)) : Math.max(440, Math.min(600, w * 0.48));
+    const margin = 13, aspect = (w - 2 * margin) / (h - 2 * margin), maxVolume = selected[0].y, gap = 0.012;
+    const packed = [], bounds = { left: -1, right: 1, top: -1, bottom: 1 };
+    function canPlace(x, y, r) {
+      for (const c of packed) {
+        const dx = x - c.x, dy = y - c.y, minimum = r + c.r + gap;
+        if (dx * dx + dy * dy < minimum * minimum - 1e-10) return false;
+      }
+      return true;
+    }
+    /* Greedy tangent candidates, scored in an ellipse matching the viewport.
+       Every radius shares one volume scale; packing never enlarges tiny coins. */
+    for (const p of selected) {
+      const r = Math.exp((Math.log(p.y) - Math.log(maxVolume)) / 2);
+      if (!packed.length) { packed.push({ p, x: 0, y: 0, r }); continue; }
+      let best = null;
+      function consider(x, y) {
+        if (!finite(x) || !finite(y) || !canPlace(x, y, r)) return;
+        const left = Math.min(bounds.left, x - r), right = Math.max(bounds.right, x + r), top = Math.min(bounds.top, y - r), bottom = Math.max(bounds.bottom, y + r);
+        const extent = Math.max((right - left) / aspect, bottom - top), distance = (x / aspect) ** 2 + y * y;
+        if (!best || extent < best.extent - 1e-9 || (Math.abs(extent - best.extent) <= 1e-9 && distance < best.distance - 1e-9)) best = { x, y, r, p, left, right, top, bottom, extent, distance };
+      }
+      for (const c of packed) {
+        const distance = c.r + r + gap;
+        for (let a = 0; a < 32; a++) { const angle = a * Math.PI / 16; consider(c.x + Math.cos(angle) * distance, c.y + Math.sin(angle) * distance); }
+      }
+      for (let i = 0; i < packed.length; i++) for (let j = i + 1; j < packed.length; j++) {
+        const a = packed[i], b = packed[j], dx = b.x - a.x, dy = b.y - a.y, distance = Math.hypot(dx, dy), ra = a.r + r + gap, rb = b.r + r + gap;
+        if (!distance || distance > ra + rb || distance < Math.abs(ra - rb)) continue;
+        const along = (ra * ra - rb * rb + distance * distance) / (2 * distance), perpendicular = Math.sqrt(Math.max(0, ra * ra - along * along));
+        const x = a.x + along * dx / distance, y = a.y + along * dy / distance;
+        consider(x - perpendicular * dy / distance, y + perpendicular * dx / distance);
+        consider(x + perpendicular * dy / distance, y - perpendicular * dx / distance);
+      }
+      if (!best) consider(bounds.right + r + gap, 0);
+      packed.push(best); bounds.left = best.left; bounds.right = best.right; bounds.top = best.top; bounds.bottom = best.bottom;
+    }
+    const factor = Math.min((w - 2 * margin) / (bounds.right - bounds.left), (h - 2 * margin) / (bounds.bottom - bounds.top));
+    const offsetX = (w - (bounds.right - bounds.left) * factor) / 2 - bounds.left * factor, offsetY = (h - (bounds.bottom - bounds.top) * factor) / 2 - bounds.top * factor;
+    let svg = begin(w, h, 'Bong bóng biến động giá 24H theo cặp và sàn', 'Tối đa 80 cặp có giá trị giao dịch 24H cao nhất. Diện tích hình tròn tỷ lệ giá trị giao dịch 24H bằng USDT, giữ nguyên cả khi một cặp lớn vượt trội. Màu phản ánh biến động giá. Chỉ hiện nhãn khi vòng tròn đủ chỗ; mọi cặp vẫn có chú giải chính xác khi trỏ hoặc lấy nét. Các vòng tròn không chồng lên nhau.');
+    for (const c of packed) {
+      const p = c.p, cx = offsetX + c.x * factor, cy = offsetY + c.y * factor, radius = c.r * factor;
+      let content = '<circle class="chart-bubble" cx="' + coord(cx) + '" cy="' + coord(cy) + '" r="' + radius + '"/>';
+      if (radius >= 33) content += text(cx, cy - 11, short(p.base, Math.min(14, Math.floor(radius / 3.4))), 'chart-bubble-label') + text(cx, cy + 4, VENUES[p.sourceId], 'chart-bubble-source') + text(cx, cy + 20, percent(p.x), 'chart-bubble-change');
+      else if (radius >= 22) content += text(cx, cy - 3, short(p.base, Math.max(3, Math.floor(radius / 3))), 'chart-bubble-label') + text(cx, cy + 13, short(percent(p.x), Math.max(5, Math.floor(radius / 2.5))), 'chart-bubble-change');
+      else if (radius >= 13) content += text(cx, cy + 3, short(p.base, Math.max(2, Math.floor(radius / 3))), 'chart-bubble-source');
       svg += clickable(p, pointTitle(p, '24h'), content, direction(p.x));
-    });
+    }
     return svg + '</svg>';
   }
   function barTitle(b, mode) {

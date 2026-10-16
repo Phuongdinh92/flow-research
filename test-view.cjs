@@ -43,12 +43,15 @@ test('constant, singleton, tiny and enormous outlier scatter values stay finite'
   for (const points of [[{ ...row(1), x: 0, y: 1 }], [{ ...row(1), x: 1e308, y: Number.MAX_VALUE }, { ...row(2), x: -1, y: Number.MIN_VALUE }]]) finiteSVG(V.scatter(points, { width: 240 }));
   assert(V.scatter([{ ...row(1), x: 0, y: 0 }]).includes('không hợp lệ'));
 });
-test('bubble selection is deterministic, bounded at 80 and circles never overlap', () => {
+test('packed bubbles stay bounded, deterministic, capped at 80 and never overlap', () => {
   const points = C.scatter24(Array.from({ length: 100 }, (_, i) => row(i, i % 2 ? 'bitget' : 'binance')), { now }).points;
   const svg = V.bubble(points, { width: 300 });
   assert.equal(svg, V.bubble([...points].reverse(), { width: 300 })); assert.equal((svg.match(/data-key=/g) || []).length, 80);
   const circles = [...svg.matchAll(/class="chart-bubble" cx="([\d.-]+)" cy="([\d.-]+)" r="([\d.-]+)"/g)].map(m => m.slice(1).map(Number));
   assert.equal(circles.length, 80);
+  const viewBox = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
+  assert(viewBox[1] <= 600);
+  for (const [x, y, r] of circles) { assert(x - r >= -0.001 && x + r <= viewBox[0] + 0.001); assert(y - r >= -0.001 && y + r <= viewBox[1] + 0.001); }
   for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) assert(Math.hypot(circles[i][0] - circles[j][0], circles[i][1] - circles[j][1]) + 0.001 >= circles[i][2] + circles[j][2]);
   assert(svg.includes('Binance')); assert(svg.includes('Bitget')); assert(svg.includes('Diện tích')); finiteSVG(svg);
 });
@@ -56,7 +59,18 @@ test('bubble areas reflect relative quote turnover, with exact values retained',
   const points = [{ ...row(1), x: 0.03, y: 400 }, { ...row(2), x: -0.02, y: 100 }];
   const svg = V.bubble(points, { width: 500 });
   const radii = [...svg.matchAll(/class="chart-bubble"[^>]+r="([\d.]+)"/g)].map(m => Number(m[1]));
-  assert.equal(radii[0] / radii[1], 2); assert(svg.includes('400 USDT')); assert(svg.includes('chart-up')); assert(svg.includes('chart-down')); finiteSVG(svg);
+  assert(Math.abs(radii[0] / radii[1] - 2) < 1e-10); assert(svg.includes('400 USDT')); assert(svg.includes('chart-up')); assert(svg.includes('chart-down')); finiteSVG(svg);
+});
+test('an outsized-volume bubble fills useful space while tiny circles keep exact size and tooltips', () => {
+  const points = [{ ...row(1), x: 0.01, y: 1e9 }, ...Array.from({ length: 39 }, (_, i) => ({ ...row(i + 2), x: -0.02, y: 1e5 + i * 1000 }))];
+  const svg = V.bubble(points, { width: 1200 });
+  const circles = [...svg.matchAll(/class="chart-bubble" cx="([\d.-]+)" cy="([\d.-]+)" r="([\d.-]+)"/g)].map(m => m.slice(1).map(Number));
+  assert(circles[0][2] > 150); assert.equal(circles.length, 40);
+  assert((svg.match(/class="chart-bubble-label"/g) || []).length < 40);
+  assert.equal((svg.match(/data-key=/g) || []).length, 40);
+  assert(svg.includes('100000 USDT')); assert(svg.includes('class="chart-bubble-source"'));
+  assert(Math.abs((circles[0][2] / circles.at(-1)[2]) ** 2 - 1e9 / 1e5) < 1e-5);
+  finiteSVG(svg);
 });
 test('OHLC candles preserve true wick/body values and independent volume pane', () => {
   const series = C.summaryDaily(bars, now, { now }).series;
