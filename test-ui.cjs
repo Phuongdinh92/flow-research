@@ -37,11 +37,11 @@ test('malformed identifiers, duplicate keys, zero price and fake future timestam
  assert.throws(()=>U.validateSnapshot(snapshot([source('binance',{rows:[row(),row()]})]),now));
 });
 
-function domHarness(initialFetch,scanSource){
- const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close'];
+function domHarness(initialFetch,scanSource,history=async id=>({bars:bars().map(b=>({...b,buy:id==='bitget'?null:b.buy})),asOf:now,fetchedAt:now,dropped:1})){
+ const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close','overview-chart','overview-meta','view-bubbles','view-scatter','chart-exclusions','flow-chart','flow-meta','flow-exclusions','history-count','load-history','cancel-history','history-status'];
  class Element{constructor(id){this.id=id;this.value=id==='source'?'all':id==='sort'?'turnover24':'';this.textContent=id==='log'?'Chưa gửi yêu cầu mạng.':'';this.innerHTML='';this.handlers={};this.open=false;}addEventListener(k,f){this.handlers[k]=f;}showModal(){this.open=true;}close(){this.open=false;}}
  const nodes=Object.fromEntries(ids.map(id=>[id,new Element(id)])),nav=new Element('nav');
- const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowMarket:{scanSource,history:async()=>({bars:bars(),asOf:now,fetchedAt:now,dropped:1})},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
+ const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowCharts:require('./charts-core.js'),FlowChartsView:require('./charts-view.js'),FlowMarket:{scanSource,history},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('./market-ui.js','utf8'),ctx);return {nodes,ctx};
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -57,6 +57,28 @@ test('failed live source retains earlier saved rows, timestamps and explicit err
 });
 test('missing snapshot remains empty and never fills synthetic production rows',async()=>{
  const h=domHarness(async()=>({ok:false,status:404}),async()=>{throw Error('blocked');});await flush();assert.equal(h.nodes.count.textContent,'0');assert.match(h.nodes.table.innerHTML,/Chưa có dữ liệu/);
+});
+function flowSnapshot(){const b=bars(),seven=b.slice(-7),quote7=seven.reduce((n,b)=>n+b.quote,0),buyQuote7=seven.reduce((n,b)=>n+b.buy,0);return {schemaVersion:1,sourceId:'binance',generatedAt:now,asOf:now,eligibleInstrumentCount:2,attemptedCount:1,records:[{key:'binance:BTCUSDT',sourceId:'binance',instrument:'BTCUSDT',base:'BTC',quote:'USDT',return7:130/123-1,return30:130/100-1,buyShare7:buyQuote7/quote7,quote7,buyQuote7,close:130,close7:123,turnover20:119/20,end:b.at(-1).end,firstTime:b[0].time,days:31,asOf:now,fetchedAt:now,provenance:{url:'https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=32',sha256:'a'.repeat(64)}}],errors:[]};}
+function routeFetch(url){return Promise.resolve({ok:true,json:async()=>url.includes('flow-snapshot')?flowSnapshot():url.includes('history-snapshot')?{schemaVersion:1,histories:{}}:snapshot([source(),source('bitget')])});}
+test('restored map loads source-valid broad summaries and Bitget filter never borrows its taker data',async()=>{
+ const h=domHarness(routeFetch,async id=>source(id));await flush();assert.match(h.nodes['flow-chart'].innerHTML,/data-key="binance:BTCUSDT"/);assert.match(h.nodes['overview-chart'].innerHTML,/data-key="bitget:BTCUSDT"/);
+ h.nodes.source.value='bitget';h.nodes.source.handlers.change();assert.match(h.nodes['flow-chart'].innerHTML,/không có trường taker/);assert.match(h.nodes.table.innerHTML,/Bitget/);assert.doesNotMatch(h.nodes['overview-chart'].innerHTML,/data-key="binance:/);
+});
+test('market points open real candle, delta and window-reset CVD charts',async()=>{
+ const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes['overview-chart'].handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.equal(h.nodes.detail.open,true);assert.match(h.nodes['detail-body'].innerHTML,/chart-candle-body/);
+ h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'delta'}})}});assert.match(h.nodes['detail-body'].innerHTML,/chart-price-overlay/);
+ h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'cvd'}})}});assert.match(h.nodes['detail-body'].innerHTML,/chart-cvd-line/);assert.match(h.nodes['detail-body'].innerHTML,/mốc|CVD cộng dồn từ 0/);
+ h.nodes['detail-body'].handlers.change({target:{matches:()=>true,value:'90'}});assert.match(h.nodes['detail-body'].innerHTML,/31\/90 ngày/);
+});
+test('cached-history source failure warning survives chart and window changes',async()=>{
+ const old={bars:bars(),asOf:now,fetchedAt:now-600001,dropped:1};
+ const fetcher=async url=>({ok:true,json:async()=>url.includes('history-snapshot')?{schemaVersion:1,histories:{'binance:BTCUSDT':old}}:url.includes('flow-snapshot')?flowSnapshot():snapshot([source()])});
+ const h=domHarness(fetcher,async id=>source(id),async()=>{throw Error('HTTP403');});await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
+ h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'cvd'}})}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
+ h.nodes['detail-body'].handlers.change({target:{matches:()=>true,value:'120'}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
+});
+test('Bitget daily detail leaves taker charts unavailable instead of zero-filled',async()=>{
+ const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'bitget:BTCUSDT'}})}});await flush();assert.match(h.nodes['detail-body'].innerHTML,/Nguồn nến Bitget không có dữ liệu taker/);assert.match(h.nodes['detail-body'].innerHTML,/data-chart-mode="cvd" disabled/);
 });
 
 (async()=>{for(const t of tests){await t.fn();console.log('ok - '+t.name);}console.log(tests.length+' meaningful UI tests passed');})().catch(e=>{console.error(e);process.exitCode=1;});

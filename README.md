@@ -1,6 +1,6 @@
-# Flow Research — Crypto Market Observatory v0.4
+# Flow Research — Crypto Market Observatory v0.5
 
-Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.4 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
+Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
 
 ## Implemented
 
@@ -8,9 +8,18 @@ Public crypto market research interface at https://phuongdinh92.github.io/flow-r
 - Bitget V3 explicitly classifies crypto/stock products; only `category=SPOT`, `status=online`, `symbolType=crypto`, `instrumentType=crypto`, `quoteCoin=USDT` qualify. Regional `areaSymbol` is not used to infer asset type.
 - Each venue/instrument has a separate key. Shared tickers do not establish common chain/contract identity. No cross-venue asset or taker-percentage aggregation.
 - Search, venue filters, sorting, pagination, per-source coverage and errors. Every row retains the source timestamp; ticker age over 15 minutes is labelled stale.
-- On-demand daily UTC history, completed candles only. Summary statistics require 31 consecutive daily bars ending on the latest closed UTC day. Binance taker buy is descriptive; the Bitget candle field is unavailable and remains null.
+- On-demand daily UTC history, completed candles only. Current 30D statistics require 31 consecutive daily bars ending on the latest closed UTC day; a 7D chart can use eight continuous closes while longer unavailable statistics remain null. Binance taker buy is descriptive; the Bitget candle field is unavailable and remains null.
 - `collect_market.py`: standard-library public snapshot collector, row validation, source failures, normalized records, endpoint/time/SHA256 provenance, atomic replacement. If all sources fail it preserves the prior snapshot. If one succeeds a partial new snapshot contains only that run's valid rows; the failed source is recorded, not relabelled as fresh.
 - Existing snapshots are optional for the UI. A failed/absent snapshot does not prevent a user-requested direct API scan. A delayed saved response cannot overwrite a newer scan.
+
+## Charts restored and added
+
+- 24H market bubbles, with area proportional to venue quote turnover. Shows up to 80 highest-turnover pairs on desktop or 24 on narrow screens; filtering applies before selection. The alternate scatter plots all usable pairs with price change and log10 USDT turnover.
+- Restored seven-day Binance taker-buy/price-change scatter, using broad closed-day summaries plus any newer on-demand histories. Coverage, history failures, and the latest closed UTC day are explicit. Bitget is excluded from this specific metric because its candle endpoint does not supply taker-buy quote volume.
+- Per-pair OHLC candles with quote-volume pane, daily aggressor buy-minus-sell bars over a separately scaled closing-price line, and cumulative aggressor delta (CVD). Windows 30/90/120 reset CVD to zero before the first displayed day.
+- `charts-core.js` validates units, source identity, UTC continuity, rollover freshness and retained summary arithmetic; `charts-view.js` renders accessible SVG with exact-value tooltips and keyboard/click navigation.
+- `collect_flow.py` reads every available Binance venue pair from the market snapshot (not a fixed token shortlist), validates 31 completed daily candles and retains independently checkable endpoint prices, quote totals and response hashes in `data/flow-snapshot.json`. Insufficient listing history and upstream errors remain explicit exclusions. It does not rank investment opportunities.
+- Six independently reconciled BTC/W/STRK histories across the two venues are included in `data/history-snapshot.json`; current pair detail can refresh directly from the source. A saved chart is explicitly labelled historical if it no longer meets the latest closed-day or ticker freshness rules.
 
 ## Public and private boundaries
 
@@ -33,10 +42,23 @@ Run without network access:
 ```text
 node test-market.cjs
 node test-ui.cjs
+node test-charts.cjs
+node test-view.cjs
 python collect_market.py --self-test
+python -m unittest test_flow
 ```
 
-The 13 adapter, 10 UI, and 9 Python validation tests pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live collection on 2026-10-16 returned 510/511 eligible Binance pairs (IQUSDT excluded for stale ticker data) and 504/504 Bitget pairs. The saved snapshot loads through the production UI validator. UI behavior is tested with an offline DOM harness; full browser rendering has not been verified.
+The 13 adapter, 14 UI, 17 chart arithmetic, 11 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
+
+Maintainers running the broad history collector need its pinned HTTP dependency. Website users do not need Python:
+
+```text
+python -m pip install -r requirements-flow.txt
+python collect_market.py
+python collect_flow.py
+```
+
+History collection uses four persistent connections with globally paced requests. Rate-limit or access-block responses stop collection; completed records are checkpointed so an interrupted run can resume on the same UTC day while retaining original fetch times.
 
 ## Source specifications
 
