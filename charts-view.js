@@ -82,7 +82,7 @@
         (finite(point.asOf) ? '\nThời điểm nguồn lịch sử: ' + new Date(point.asOf).toISOString() : '') +
         (finite(point.fetchedAt) ? '\nLấy lịch sử lúc: ' + new Date(point.fetchedAt).toISOString() : '') :
         (finite(point.last) ? '\n'+(point.sourceId==='coingecko'?'Giá tổng hợp: ':'Giá ticker: ')+exact(point.last) + ' ' + quote : '') +
-        (finite(point.asOf) ? '\nThời điểm ticker: ' + new Date(point.asOf).toISOString() : ''));
+        (finite(point.asOf) ? '\n'+(point.sourceId==='coingecko'?'Thời điểm nguồn cập nhật: ':'Thời điểm ticker: ')+new Date(point.asOf).toISOString() : ''));
   }
   function scatter(points, { kind = '24h', width, maxLabels = 18, windowLabel = '24H' } = {}) {
     if (!['24h', '7d'].includes(kind)) return empty('Loại biểu đồ phân tán không được hỗ trợ.');
