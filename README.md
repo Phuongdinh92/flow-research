@@ -1,11 +1,12 @@
 # Flow Research — Crypto Market Observatory v0.5
 
-Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
+Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5.1 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
 
 ## Implemented
 
 - `market.js`: read-only Binance Spot + Bitget Spot public adapters. Discovers eligible active USDT instruments from source metadata instead of a fixed 25/30-symbol list.
 - Bitget V3 explicitly classifies crypto/stock products; only `category=SPOT`, `status=online`, `symbolType=crypto`, `instrumentType=crypto`, `quoteCoin=USDT` qualify. Regional `areaSymbol` is not used to infer asset type.
+- Binance exchangeInfo establishes active spot/USDT eligibility but supplies no underlying asset-class label in the observed registry. This universe is not certified crypto-only; ticker suffixes are not a reliable stock/ETF classifier. Bitget uses its explicit crypto classification.
 - Each venue/instrument has a separate key. Shared tickers do not establish common chain/contract identity. No cross-venue asset or taker-percentage aggregation.
 - Search, venue filters, sorting, pagination, per-source coverage and errors. Every row retains the source timestamp; ticker age over 15 minutes is labelled stale.
 - On-demand daily UTC history, completed candles only. Current 30D statistics require 31 consecutive daily bars ending on the latest closed UTC day; a 7D chart can use eight continuous closes while longer unavailable statistics remain null. Binance taker buy is descriptive; the Bitget candle field is unavailable and remains null.
@@ -48,7 +49,7 @@ python collect_market.py --self-test
 python -m unittest test_flow
 ```
 
-The 13 adapter, 14 UI, 17 chart arithmetic, 11 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
+The 13 adapter, 14 UI, 17 chart arithmetic, 11 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. Broad Binance daily collection checked all 511 available pairs: 489 had 31 continuous completed UTC days and 22 lacked sufficient history. Every retained record was reconciled against its raw response. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
 
 Maintainers running the broad history collector need its pinned HTTP dependency. Website users do not need Python:
 
