@@ -111,13 +111,15 @@
     }
     return svg + '</svg>';
   }
-  function bubble(points, { width, sizeBy = 'equal', windowLabel = '24H' } = {}) {
+  function bubble(points, { width, sizeBy = 'equal', windowLabel = '24H', maxItems = 80 } = {}) {
     if (!['equal', 'turnover'].includes(sizeBy)) return empty('Cách chọn kích thước bong bóng không được hỗ trợ.');
     if (!Array.isArray(points) || !points.length) return empty('Chưa có ticker hợp lệ để vẽ bong bóng.');
     if (points.some(p => !identity(p) || !finite(p.x) || !finite(p.y) || p.y <= 0)) return empty('Dữ liệu bong bóng không hợp lệ.');
-    const selected = [...points].sort((a, b) => a.y === b.y ? a.key.localeCompare(b.key) : a.y > b.y ? -1 : 1).slice(0, 80);
+    const limit = finite(maxItems) ? Math.max(1, Math.min(200, Math.floor(maxItems))) : 80;
+    const selected = [...points].sort((a, b) => a.y === b.y ? a.key.localeCompare(b.key) : a.y > b.y ? -1 : 1).slice(0, limit);
     const quotes = [...new Set(selected.map(p => p.quote || 'USDT'))], quoteLabel = quotes.length === 1 ? quotes[0] : 'đơn vị của từng nguồn';
-    const w = widthOf(width), h = w < 600 ? Math.max(340, Math.min(520, w * 1.05)) : Math.max(440, Math.min(600, w * 0.48));
+    const w = widthOf(width), baseHeight = w < 600 ? Math.max(340, Math.min(520, w * 1.05)) : Math.max(440, Math.min(600, w * 0.48));
+    const h = baseHeight * Math.sqrt(Math.max(1, selected.length / 80));
     const margin = 13, aspect = (w - 2 * margin) / (h - 2 * margin), maxVolume = selected[0].y, gap = 0.012;
     const packed = [], bounds = { left: -1, right: 1, top: -1, bottom: 1 };
     function canPlace(x, y, r) {
@@ -156,7 +158,7 @@
     }
     const factor = Math.min((w - 2 * margin) / (bounds.right - bounds.left), (h - 2 * margin) / (bounds.bottom - bounds.top));
     const offsetX = (w - (bounds.right - bounds.left) * factor) / 2 - bounds.left * factor, offsetY = (h - (bounds.bottom - bounds.top) * factor) / 2 - bounds.top * factor;
-    let svg = begin(w, h, 'Bong bóng biến động giá ' + windowLabel + ' theo tài sản và nguồn', 'Tối đa 80 tài sản/nguồn có giá trị giao dịch 24H cao nhất. ' + (sizeBy === 'equal' ? 'Các vòng tròn có kích thước bằng nhau để dễ đọc tên; diện tích không biểu thị khối lượng hay vốn hóa. ' : 'Diện tích hình tròn tỷ lệ giá trị giao dịch 24H bằng ' + quoteLabel + ', giữ nguyên cả khi một tài sản lớn vượt trội. ') + 'Màu phản ánh biến động giá ' + windowLabel + '. Chỉ hiện nhãn khi vòng tròn đủ chỗ; mọi tài sản vẫn có chú giải chính xác khi trỏ hoặc lấy nét. Các vòng tròn không chồng lên nhau.');
+    let svg = begin(w, h, 'Bong bóng biến động giá ' + windowLabel + ' theo tài sản và nguồn', 'Hiển thị ' + selected.length + '/' + points.length + ' tài sản/nguồn hợp lệ có giá trị giao dịch 24H cao nhất; giới hạn được chọn ' + limit + ', tối đa 200. ' + (sizeBy === 'equal' ? 'Các vòng tròn có kích thước bằng nhau để dễ đọc tên; diện tích không biểu thị khối lượng hay vốn hóa. ' : 'Diện tích hình tròn tỷ lệ giá trị giao dịch 24H bằng ' + quoteLabel + ', giữ nguyên cả khi một tài sản lớn vượt trội. ') + 'Màu phản ánh biến động giá ' + windowLabel + '. Chỉ hiện nhãn khi vòng tròn đủ chỗ; mọi tài sản vẫn có chú giải chính xác khi trỏ hoặc lấy nét. Các vòng tròn không chồng lên nhau.');
     for (const c of packed) {
       const p = c.p, cx = offsetX + c.x * factor, cy = offsetY + c.y * factor, radius = c.r * factor;
       let content = '<circle class="chart-bubble" cx="' + coord(cx) + '" cy="' + coord(cy) + '" r="' + radius + '"/>';
@@ -180,20 +182,22 @@
     if (series.some(b => !b || !['time', 'end', 'open', 'high', 'low', 'close', 'quote'].every(k => finite(b[k])) || b.time < 946684800000 || b.end >= 4102444800000 || b.end < b.time || Math.min(b.open, b.high, b.low, b.close) <= 0 || b.quote < 0 || b.high < Math.max(b.open, b.close, b.low) || b.low > Math.min(b.open, b.close, b.high))) return empty('Nến lịch sử không hợp lệ; chưa vẽ biểu đồ.');
     if (mode !== 'price' && series.some(b => !['buy', 'sell', 'delta', 'cvd'].every(k => finite(b[k])))) return empty('Nguồn hoặc cửa sổ này chưa có đầy đủ dữ liệu taker mua/bán. Chưa thể tính ' + (mode === 'delta' ? 'delta' : 'CVD') + '; không thay dữ liệu thiếu bằng 0.');
     const bars = [...series].sort((a, b) => a.time - b.time);
-    const w = widthOf(width), h = mode === 'price' ? 430 : 360, left = w < 420 ? 61 : 77, right = w - (mode === 'delta' ? (w < 420 ? 59 : 78) : 23), top = 40, bottom = mode === 'price' ? 270 : h - 60;
-    const start = bars[0].time, finish = bars.at(-1).end + 1, span = Math.max(DAY, finish - start), plotWidth = right - left;
+    const indicators = [ { field: 'sma20', css: 'chart-sma20', label: 'SMA20 ngày' }, { field: 'ema50', css: 'chart-ema50', label: 'EMA50 ngày' }, { field: 'ema200', css: 'chart-ema200', label: 'EMA200 ngày' } ].filter(indicator => mode === 'price' && bars.some(b => finite(b[indicator.field]) && b[indicator.field] > 0));
+    const w = widthOf(width), left = w < 420 ? 61 : 77, right = w - (mode === 'delta' ? (w < 420 ? 59 : 78) : 23), top = 40;
+    const plotWidth = right - left, legendColumns = Math.max(1, Math.min(indicators.length, Math.floor(plotWidth / 95))), legendExtra = mode === 'price' ? Math.max(0, Math.ceil(indicators.length / legendColumns) - 1) * 14 : 0;
+    const h = mode === 'price' ? 430 + legendExtra : 360, bottom = mode === 'price' ? 270 : h - 60;
+    const start = bars[0].time, finish = bars.at(-1).end + 1, span = Math.max(DAY, finish - start);
     const at = time => left + (time - start) / span * plotWidth, center = b => at((b.time + b.end + 1) / 2), barWidthFor = b => Math.max(0.7, Math.min(28, (b.end + 1 - b.time) / span * plotWidth * 0.65));
     const title = mode === 'price' ? 'Nến OHLC và giá trị giao dịch ' + INTERVALS[interval].name + ' UTC' : mode === 'delta' ? 'Taker delta ' + INTERVALS[interval].name + ' UTC và giá đóng cửa' : 'CVD taker theo cửa sổ ' + INTERVALS[interval].name + ' UTC';
     let svg = begin(w, h, title, mode === 'cvd' ? 'CVD bằng tổng tích lũy taker mua trừ taker bán, đặt lại 0 ở đầu cửa sổ hiển thị. Đơn vị USDT; không phải dòng tiền mới hoặc số dư ví.' : mode === 'delta' ? 'Cột là taker mua trừ taker bán bằng USDT; đường giá đóng cửa dùng trục giá độc lập bên phải. Không xác định ai mua.' : 'Mỗi nến giữ nguyên Open, High, Low, Close. Cột ở ô riêng bên dưới là giá trị giao dịch quote bằng USDT.');
-    const indicators = [ { field: 'sma20', css: 'chart-sma20', label: 'SMA20 ngày' }, { field: 'ema50', css: 'chart-ema50', label: 'EMA50 ngày' } ].filter(indicator => mode === 'price' && bars.some(b => finite(b[indicator.field]) && b[indicator.field] > 0));
     const indicatorValues = indicators.flatMap(indicator => bars.map(b => b[indicator.field]).filter(value => finite(value) && value > 0));
     const y = scale(mode === 'price' ? bars.flatMap(b => [b.low, b.high]).concat(indicatorValues) : bars.map(b => mode === 'delta' ? b.delta : b.cvd), bottom, top, { includeZero: mode !== 'price', nonnegative: mode === 'price' });
     for (const t of y.ticks) svg += line(left, t.coordinate, right, t.coordinate) + text(left - 8, t.coordinate + 4, human(t.value), 'chart-tick', 'end');
     svg += text(left, 19, mode === 'price' ? 'GIÁ · USDT' : mode === 'delta' ? 'TAKER DELTA · USDT' : 'CVD · USDT · RESET ĐẦU CỬA SỔ', 'chart-axis-label', 'start');
     if (mode !== 'price') svg += line(left, y.map(0), right, y.map(0), 'chart-zero');
     if (mode === 'price') {
-      const vTop = 310, vBottom = 376, volumes = scale(bars.map(b => b.quote), vBottom, vTop, { includeZero: true, nonnegative: true, padding: 0 });
-      svg += text(left, 299, INTERVALS[interval].volume, 'chart-axis-label', 'start');
+      const vTop = 310 + legendExtra, vBottom = 376 + legendExtra, volumes = scale(bars.map(b => b.quote), vBottom, vTop, { includeZero: true, nonnegative: true, padding: 0 });
+      svg += text(left, 299 + legendExtra, INTERVALS[interval].volume, 'chart-axis-label', 'start');
       for (const t of [volumes.ticks[0], volumes.ticks[4]]) svg += line(left, t.coordinate, right, t.coordinate) + text(left - 8, t.coordinate + 4, human(t.value), 'chart-tick', 'end');
       for (const b of bars) {
         const cx = center(b), open = y.map(b.open), close = y.map(b.close), bodyTop = Math.min(open, close), bodyHeight = Math.max(0.8, Math.abs(close - open)), barWidth = barWidthFor(b);
@@ -210,8 +214,8 @@
         }
         svg += '<path class="' + indicator.css + '" d="' + path.trim() + '"/>';
         for (const b of bars) if (finite(b[indicator.field]) && b[indicator.field] > 0) svg += '<circle class="' + indicator.css + ' chart-indicator-sample" cx="' + coord(center(b)) + '" cy="' + coord(y.map(b[indicator.field])) + '" r="1.8"><title>' + esc(date(b.end) + ' UTC · ' + indicator.label + ': ' + exact(b[indicator.field]) + ' USDT') + '</title></circle>';
-        const legendX = left + index * Math.max(90, Math.min(130, plotWidth / 2));
-        svg += line(legendX, 285, legendX + 12, 285, indicator.css) + text(legendX + 17, 289, indicator.label, 'chart-indicator-label ' + indicator.css + '-label', 'start');
+        const legendX = left + (index % legendColumns) * Math.min(130, plotWidth / legendColumns), legendY = 285 + Math.floor(index / legendColumns) * 14;
+        svg += line(legendX, legendY, legendX + 12, legendY, indicator.css) + text(legendX + 17, legendY + 4, indicator.label, 'chart-indicator-label ' + indicator.css + '-label', 'start');
       });
     } else if (mode === 'delta') {
       const price = scale(bars.map(b => b.close), bottom, top, { nonnegative: true });
@@ -227,7 +231,7 @@
       svg += '<path class="chart-cvd-line" d="M' + coord(left) + ',' + coord(y.map(0)) + ' ' + bars.map(b => 'L' + coord(at(b.end + 1)) + ',' + coord(y.map(b.cvd))).join(' ') + '"/>';
       for (const b of bars) svg += '<circle class="chart-cvd-sample" cx="' + coord(at(b.end + 1)) + '" cy="' + coord(y.map(b.cvd)) + '" r="2.5"><title>' + esc(barTitle(b, 'cvd', interval)) + '</title></circle>';
     }
-    const dateY = mode === 'price' ? 400 : h - 35;
+    const dateY = mode === 'price' ? 400 + legendExtra : h - 35;
     svg += text(left, dateY, date(start), 'chart-tick', 'start') + text(right, dateY, date(bars.at(-1).end), 'chart-tick', 'end') + text((left + right) / 2, h - 11, INTERVALS[interval].axis, 'chart-axis-label');
     return svg + '</svg>';
   }

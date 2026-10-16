@@ -111,10 +111,24 @@ test('aggregate rejects duplicate, unclosed, misaligned, nonfinite and impossibl
  const b=bars();for(const bad of [[...b,b[0]],b.map((v,i)=>i===120?{...v,time:v.time+1}:v),b.map((v,i)=>i===120?{...v,high:1}:v),b.map((v,i)=>i===120?{...v,buy:Infinity}:v),b.map((v,i)=>i===120?{...v,end:now}:v)])assert.throws(()=>C.aggregateBarsUTC(bad,{interval:'1w',asOf:now,now}));assert.throws(()=>C.aggregateBarsUTC(b,{interval:'30d',asOf:now,now}));assert.throws(()=>C.aggregateBarsUTC(b,{asOf:now,now,windowDays:0}));
 });
 test('SMA20 and SMA-seeded EMA50 warm up on full daily history before display slicing',()=>{
- const b=calendarBars(Date.UTC(2026,5,17),121).map((v,i)=>({...v,open:i+1,high:i+1,low:i+1,close:i+1})),r=C.dailyMovingAverages(b,{asOf:now,now});assert.equal(r.series[18].sma20,null);assert.equal(r.series[19].sma20,10.5);assert.equal(r.series[48].ema50,null);assert.equal(r.series[49].ema50,25.5);assert.equal(r.series.at(-1).sma20,111.5);assert(Math.abs(r.series.at(-1).ema50-96.5)<1e-10);assert(r.series.slice(-30).every(v=>v.ema50!==null));assert.equal(r.coverage.smaDays,102);assert.equal(r.coverage.emaDays,72);assert.equal(r.coverage.usesFullHistory,true);assert.equal(r.series[0].ema200,undefined);
+ const b=calendarBars(Date.UTC(2026,5,17),121).map((v,i)=>({...v,open:i+1,high:i+1,low:i+1,close:i+1})),r=C.dailyMovingAverages(b,{asOf:now,now});assert.equal(r.series[18].sma20,null);assert.equal(r.series[19].sma20,10.5);assert.equal(r.series[48].ema50,null);assert.equal(r.series[49].ema50,25.5);assert.equal(r.series.at(-1).sma20,111.5);assert(Math.abs(r.series.at(-1).ema50-96.5)<1e-10);assert(r.series.slice(-30).every(v=>v.ema50!==null));assert.equal(r.coverage.smaDays,102);assert.equal(r.coverage.emaDays,72);assert.equal(r.coverage.usesFullHistory,true);assert.equal(r.series[0].ema200,null);assert.equal(r.coverage.ema200Days,0);
  const shock=b.map((v,i)=>i===120?{...v,open:200,high:200,low:200,close:200}:v),s=C.dailyMovingAverages(shock,{asOf:now,now});assert(Math.abs(s.series.at(-1).ema50-(95.5+2/51*(200-95.5)))<1e-10);
 });
 test('moving averages restart warmup after a missing UTC day and never bridge the gap',()=>{
  const b=bars().filter((_,i)=>i!==60),r=C.dailyMovingAverages(b,{asOf:now,now});assert.equal(r.coverage.resetsAt.length,1);assert.equal(r.series[60].sma20,null);assert.equal(r.series[60].ema50,null);assert.equal(r.series[78].sma20,null);assert.notEqual(r.series[79].sma20,null);assert.equal(r.series[108].ema50,null);assert.notEqual(r.series[109].ema50,null);assert.throws(()=>C.dailyMovingAverages(b,{asOf:now,now,emaPeriod:0}));
+});
+test('180-day and 365-day views use full actual windows and reset CVD at each display boundary',()=>{
+ const b=bars(401),short=C.summaryDaily(b,now,{window:180,now}),long=C.summaryDaily(b,now,{window:365,now});
+ assert.equal(short.series.length,180);assert.equal(long.series.length,365);assert.equal(short.series[0].cvd,20);assert.equal(short.series.at(-1).cvd,3600);assert.equal(long.series[0].cvd,20);assert.equal(long.series.at(-1).cvd,7300);assert.equal(long.return180,501/321-1);assert.equal(long.return365,501/136-1);assert.equal(long.coverage.completeWindow,true);
+ const insufficient=C.summaryDaily(bars(),now,{window:365,now});assert.equal(insufficient.series.length,121);assert.equal(insufficient.coverage.completeWindow,false);assert.equal(insufficient.return365,null);
+});
+test('EMA200 starts only after its exact SMA seed and uses all 401 daily closes before slicing',()=>{
+ const b=bars(401).map((v,i)=>({...v,open:i+1,high:i+1,low:i+1,close:i+1})),r=C.dailyMovingAverages(b,{asOf:now,now});
+ assert(r.series.slice(0,199).every(v=>v.ema200===null));assert.equal(r.series[199].ema200,100.5);assert(Math.abs(r.series[200].ema200-101.5)<1e-10);assert(Math.abs(r.series.at(-1).ema200-301.5)<1e-9);assert.equal(r.coverage.ema200Days,202);assert.equal(r.coverage.firstEma200Time,b[199].time);assert(r.series.slice(-180).every(v=>v.ema200!==null));
+ const shock=b.map((v,i)=>i===400?{...v,open:600,high:600,low:600,close:600}:v),s=C.dailyMovingAverages(shock,{asOf:now,now});assert(Math.abs(s.series.at(-1).ema200-(300.5+2/201*(600-300.5)))<1e-10);
+});
+test('EMA200 requires a fresh 200-day warmup after a missing UTC day',()=>{
+ const b=bars(401).filter((_,i)=>i!==200),r=C.dailyMovingAverages(b,{asOf:now,now});
+ assert.notEqual(r.series[199].ema200,null);assert.equal(r.series[200].ema200,null);assert.equal(r.series[398].ema200,null);assert.notEqual(r.series[399].ema200,null);assert.equal(r.coverage.resetsAt[0],b[200].time);
 });
 for(const t of tests){t.fn();console.log('ok - '+t.name);}console.log(tests.length+' chart tests passed');

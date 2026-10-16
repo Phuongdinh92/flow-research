@@ -55,6 +55,25 @@ test('packed bubbles stay bounded, deterministic, capped at 80 and never overlap
   for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) assert(Math.hypot(circles[i][0] - circles[j][0], circles[i][1] - circles[j][1]) + 0.001 >= circles[i][2] + circles[j][2]);
   assert(svg.includes('Binance')); assert(svg.includes('Bitget')); assert(svg.includes('kích thước bằng nhau')); finiteSVG(svg);
 });
+test('200-bubble option is bounded, deterministic and does not distort relative areas', () => {
+  const points = Array.from({ length: 230 }, (_, i) => ({ ...row(i, i % 2 ? 'bitget' : 'binance'), x: i % 3 ? 0.05 : -0.04, y: (i + 1) ** 2 }));
+  for (const width of [320, 1200]) for (const sizeBy of ['equal', 'turnover']) {
+    const options = { width, sizeBy, maxItems: 200 }, svg = V.bubble(points, options);
+    assert.equal(svg, V.bubble([...points].reverse(), options));
+    assert.equal((svg.match(/data-key=/g) || []).length, 200);
+    assert(svg.includes('Hiển thị 200/230')); assert(svg.includes('giới hạn được chọn 200'));
+    const circles = [...svg.matchAll(/class="chart-bubble" cx="([\d.-]+)" cy="([\d.-]+)" r="([\d.e+-]+)"/g)].map(m => m.slice(1).map(Number));
+    const [w, h] = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/).slice(1).map(Number);
+    assert.equal(circles.length, 200); assert(h <= 950);
+    for (const [x, y, r] of circles) { assert(r > 0); assert(x - r >= 12.999 && x + r <= w - 12.999); assert(y - r >= 12.999 && y + r <= h - 12.999); }
+    for (let i = 0; i < circles.length; i++) for (let j = i + 1; j < circles.length; j++) assert(Math.hypot(circles[i][0] - circles[j][0], circles[i][1] - circles[j][1]) + 0.001 >= circles[i][2] + circles[j][2]);
+    if (sizeBy === 'equal') assert(circles.every(c => c[2] === circles[0][2]));
+    else assert(Math.abs((circles[0][2] / circles.at(-1)[2]) ** 2 - 230 ** 2 / 31 ** 2) < 1e-8);
+    finiteSVG(svg);
+  }
+  assert.equal((V.bubble(points, { maxItems: 10000 }).match(/data-key=/g) || []).length, 200);
+  assert.equal((V.bubble(points, { maxItems: 40 }).match(/data-key=/g) || []).length, 40);
+});
 test('bubble areas reflect relative quote turnover, with exact values retained', () => {
   const points = [{ ...row(1), x: 0.03, y: 400 }, { ...row(2), x: -0.02, y: 100 }];
   const svg = V.bubble(points, { width: 500, sizeBy: 'turnover' });
@@ -150,6 +169,23 @@ test('optional daily averages share the price axis, respect missing warmup and n
   const skippedDay = V.daily([series[0], series[2]], { mode: 'price' }).match(/<path class="chart-sma20" d="([^\"]+)"/)[1];
   assert.equal((skippedDay.match(/M/g) || []).length, 2); assert(!skippedDay.includes('L'));
   assert(!V.daily(series, { mode: 'delta' }).includes('chart-sma20')); finiteSVG(svg);
+});
+test('EMA200 uses the true price axis, hides unseeded values and breaks across missing observations', () => {
+  const series = bars.slice(0, 5).map((b, i) => ({ ...b, sma20: b.close, ema50: b.close, ema200: [undefined, b.close, null, b.close, b.close][i] }));
+  const svg = V.daily(series, { mode: 'price', width: 240 });
+  const path = svg.match(/<path class="chart-ema200" d="([^\"]+)"/)[1];
+  assert.equal((path.match(/M/g) || []).length, 2); assert.equal((path.match(/L/g) || []).length, 1);
+  const samples = [...svg.matchAll(/class="chart-ema200 chart-indicator-sample" cx="([\d.-]+)" cy="([\d.-]+)"/g)].map(m => m.slice(1).map(Number));
+  const candles = [...svg.matchAll(/class="chart-candle-body" x="([\d.-]+)" y="([\d.-]+)"/g)].map(m => m.slice(1).map(Number));
+  assert.equal(samples.length, 3);
+  assert.equal(samples[0][1], candles[1][1]); // EMA200 equals close, hence body's top for an up candle.
+  assert(svg.includes('EMA200 ngày: ' + series[4].close + ' USDT'));
+  const labels = [...svg.matchAll(/class="chart-indicator-label [^\"]+" x="([\d.-]+)" y="([\d.-]+)"/g)].map(m => m.slice(1).map(Number));
+  assert.equal(labels.length, 3); assert.equal(new Set(labels.map(p => p[1])).size, 3); assert(labels.every(p => p[0] < 200));
+  assert(!V.daily(series.map(b => ({ ...b, ema200: undefined })), { mode: 'price' }).includes('chart-ema200'));
+  const skipped = V.daily([series[1], series[4]], { mode: 'price' }).match(/<path class="chart-ema200" d="([^\"]+)"/)[1];
+  assert.equal((skipped.match(/M/g) || []).length, 2); assert(!skipped.includes('L'));
+  assert(!V.daily(series, { mode: 'cvd' }).includes('chart-ema200')); finiteSVG(svg);
 });
 
 for (const t of tests) { t.run(); console.log('ok - ' + t.name); }

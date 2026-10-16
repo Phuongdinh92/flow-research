@@ -94,4 +94,42 @@ test('new adapters use only their documented public origin and unsupported histo
  assert.equal((await M.scanSource('gate',fetcher)).rows.length,1);assert.equal((await M.scanSource('whitebit',fetcher)).rows.length,1);assert(seen.every(u=>u.startsWith('https://api.gateio.ws/')||u.startsWith('https://whitebit.com/')));const n=seen.length;await assert.rejects(()=>M.history('whitebit','BTC_USDT',fetcher),/chưa hỗ trợ/);assert.equal(seen.length,n);assert.equal(M.NAMES.gate,'Gate');assert.equal(M.list().length,M.SOURCES.length);
 });
 
+test('history parsing preserves 121-day default and exposes requested 401-day coverage without silent truncation',()=>{
+ const raw=Array.from({length:402},(_,i)=>bc(today-i*M.DAY));
+ const legacy=M.parseHistory('binance',raw,now,now),long=M.parseHistory('binance',raw,now,now,{days:401});
+ assert.equal(legacy.bars.length,121);assert.equal(legacy.coverage.requestedDays,121);
+ assert.equal(long.bars.length,401);assert.equal(long.dropped,1);assert.equal(long.bars[0].time,today-401*M.DAY);assert.equal(long.bars.at(-1).time,day);assert.equal(long.coverage.completeWindow,true);assert.equal(long.coverage.shortfallDays,0);
+ const short=M.parseHistory('binance',raw.slice(0,13),now,now,{days:401});assert.equal(short.bars.length,12);assert.equal(short.coverage.shortfallDays,389);assert.equal(short.coverage.completeWindow,false);
+ const gap=M.parseHistory('binance',raw.filter((_,i)=>i!==10),now,now,{days:401});assert.equal(gap.coverage.continuous,false);assert.equal(gap.coverage.completeWindow,false);
+});
+test('long Binance and Gate histories request source-native daily limits and retain the full returned span',async()=>{
+ for(const id of ['binance','gate']){
+  const seen=[],response=data=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>data});
+  const fetcher=async url=>{seen.push(new URL(url));if(url.endsWith('/time'))return response(id==='binance'?{serverTime:Date.now()}:{server_time:Date.now()});return response(Array.from({length:402},(_,i)=>id==='binance'?bc(today-i*M.DAY):[String((today-i*M.DAY)/1000),'5000','100','110','80','90','50',i===0?'false':'true']));};
+  const result=await M.history(id,id==='gate'?'BTC_USDT':'BTCUSDT',fetcher,{days:401});
+  assert.equal(result.bars.length,401);assert.equal(result.coverage.completeWindow,true);assert.equal(seen.length,2);assert.equal(seen[1].searchParams.get('limit'),'402');assert.equal(seen[1].searchParams.get('interval'),'1d');assert.equal(seen[1].searchParams.has('from'),false);assert.equal(seen[1].searchParams.has('to'),false);
+ }
+});
+test('Bitget long history fills an observed 300-row cap with an older documented page and leaves taker missing',async()=>{
+ const seen=[],response=data=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>wrap(data)});
+ const fetcher=async url=>{const u=new URL(url);seen.push(u);return response(u.pathname.endsWith('/history-candles')?Array.from({length:102},(_,i)=>gc(today-(300+i)*M.DAY)):Array.from({length:300},(_,i)=>gc(today-i*M.DAY)));};
+ const result=await M.history('bitget','BTCUSDT',fetcher,{days:401});
+ assert.equal(result.bars.length,401);assert.equal(result.coverage.completeWindow,true);assert.equal(result.coverage.pages,2);assert.equal(result.dropped,1);assert(result.bars.every(b=>b.buy===null));
+ assert.equal(seen.length,2);assert.equal(seen[0].searchParams.get('limit'),'402');assert.equal(seen[1].pathname,'/api/v2/spot/market/history-candles');assert.equal(seen[1].searchParams.get('limit'),'102');assert.equal(seen[1].searchParams.get('endTime'),String(today-299*M.DAY));assert.equal(seen[1].searchParams.get('granularity'),'1Dutc');
+ assert.equal(result.bars[0].time,today-401*M.DAY);assert.equal(result.bars.at(-1).time,day);
+});
+test('Bitget short listing history remains explicitly short, and non-progress or blocked pagination stops',async()=>{
+ const response=data=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>wrap(data)});
+ let calls=0;const recent=Array.from({length:12},(_,i)=>gc(day-i*M.DAY));
+ const short=await M.history('bitget','BTCUSDT',async()=>response(++calls===1?recent:[]),{days:401});assert.equal(calls,2);assert.equal(short.bars.length,12);assert.equal(short.coverage.shortfallDays,389);assert.equal(short.coverage.completeWindow,false);
+ calls=0;await assert.rejects(()=>M.history('bitget','BTCUSDT',async()=>{calls++;return response(recent);},{days:401}),/không lùi/);assert.equal(calls,2);
+ calls=0;await assert.rejects(()=>M.history('bitget','BTCUSDT',async()=>++calls===1?response(recent):{ok:false,status:429,headers:{get:()=> '120'}},{days:401}),e=>e.retryAfterMs===120000);assert.equal(calls,2);
+});
+test('invalid history lengths fail before network access rather than clamping the requested period',async()=>{
+ let calls=0;for(const days of [0,-1,1000,'401',401.5,NaN]){
+  assert.throws(()=>M.parseHistory('binance',[bc()],now,now,{days}),/Số ngày lịch sử/);
+  await assert.rejects(()=>M.history('binance','BTCUSDT',async()=>{calls++;throw Error('unexpected network');},{days}),/Số ngày lịch sử/);
+ }assert.equal(calls,0);
+});
+
 (async()=>{for(const t of tests){await t.fn();console.log('ok - '+t.name);}console.log(tests.length+' meaningful market tests passed');})().catch(e=>{console.error(e);process.exitCode=1;});

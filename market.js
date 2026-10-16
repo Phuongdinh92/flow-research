@@ -7,6 +7,9 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const DAY = 86400000, TTL = 900000, TIMEOUT = 15000;
+  // The three documented daily endpoints accept at most 1,000 rows. Reserve one
+  // row for the current incomplete UTC day; no request is silently capped.
+  const DEFAULT_HISTORY_DAYS = 121, MAX_HISTORY_DAYS = 999;
   const SOURCES = Object.freeze([
     Object.freeze({ id: 'binance', name: 'Binance', origin: 'https://data-api.binance.vision', supportsDaily: true, capabilities: Object.freeze({ rolling24h: true, quoteTurnover: true, dailyUTC: true, takerBuyQuote: true, perInstrumentTimestamp: true, assetClass: false }) }),
     Object.freeze({ id: 'bitget', name: 'Bitget', origin: 'https://api.bitget.com', supportsDaily: true, capabilities: Object.freeze({ rolling24h: true, quoteTurnover: true, dailyUTC: true, takerBuyQuote: false, perInstrumentTimestamp: true, assetClass: true }) }),
@@ -79,7 +82,12 @@
     }
     return { sourceId, name: s.name, asOf, fetchedAt, instrumentCount: listed.instruments.length, rows, errors, excludedCount: listed.excludedCount, capabilities: s.capabilities, supportsDaily: s.supportsDaily, timestampKind: s.timestampKind || 'per_instrument' };
   }
-  function parseHistory(sourceId, raw, asOf, fetchedAt = Date.now()) {
+  function historyDays(days) {
+    if (!Number.isInteger(days) || days < 1 || days > MAX_HISTORY_DAYS) throw Error('Số ngày lịch sử phải là số nguyên từ 1 đến ' + MAX_HISTORY_DAYS);
+    return days;
+  }
+  function parseHistory(sourceId, raw, asOf, fetchedAt = Date.now(), { days = DEFAULT_HISTORY_DAYS } = {}) {
+    historyDays(days);
     if (!source(sourceId).supportsDaily) throw Error('Nguồn này chưa hỗ trợ nến ngày UTC đã kiểm chứng'); asOf = stamp(asOf); fetchedAt = stamp(fetchedAt);
     const items = sourceId === 'binance' || sourceId === 'gate' ? array(raw, sourceId + ' candles') : envelope(raw).data;
     const map = new Map(); let dropped = 0;
@@ -98,8 +106,9 @@
       if (map.has(time) && JSON.stringify(map.get(time)) !== JSON.stringify(b)) throw Error('Hai nến cùng ngày mâu thuẫn');
       map.set(time, b);
     }
-    const bars = [...map.values()].sort((a, b) => a.time - b.time).slice(-121);
-    return { bars, asOf, fetchedAt, dropped };
+    const closed = [...map.values()].sort((a, b) => a.time - b.time), bars = closed.slice(-days), latestExpectedEnd = Math.floor(asOf / DAY) * DAY - 1;
+    const continuous = bars.every((b, i) => !i || b.time - bars[i - 1].time === DAY), current = !!bars.length && bars.at(-1).end === latestExpectedEnd;
+    return { bars, asOf, fetchedAt, dropped, coverage: { requestedDays: days, returnedDays: bars.length, availableClosedDays: closed.length, shortfallDays: Math.max(0, days - bars.length), continuous, current, completeWindow: bars.length === days && continuous && current, latestExpectedEnd, firstTime: bars[0]?.time ?? null, latestEnd: bars.at(-1)?.end ?? null } };
   }
   async function request(url, fetchImpl) {
     const controller = new AbortController(); let timer;
@@ -145,21 +154,44 @@
     const metaTime = envelope(meta).asOf, asOf = clock(envelope(tickers).asOf); clock(metaTime);
     return parseScan(sourceId, meta, tickers, asOf, Date.now());
   }
-  async function history(sourceId, instrument, fetchImpl = fetch) {
+  // https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints
+  // https://www.gate.com/docs/developers/apiv4/en/spot/#market-k-line-chart
+  // https://www.bitget.com/zh-CN/docs/catalog/classic-spot-market/classic-spot-market
+  // Bitget documents /candles up to 1,000 rows, but the live endpoint may return
+  // fewer. Older pages use documented /history-candles (at most 200 rows).
+  async function history(sourceId, instrument, fetchImpl = fetch, { days = DEFAULT_HISTORY_DAYS } = {}) {
+    historyDays(days);
     const s = source(sourceId); identifier(instrument);
     if (!s.supportsDaily) throw Error('Nguồn này chưa hỗ trợ nến ngày UTC đã kiểm chứng');
     if (sourceId === 'binance') {
       const time = await request(s.origin + '/api/v3/time', fetchImpl), asOf = clock(time.serverTime);
-      const raw = await request(s.origin + '/api/v3/klines?' + new URLSearchParams({ symbol: instrument, interval: '1d', limit: '122' }), fetchImpl);
-      return parseHistory(sourceId, raw, asOf, Date.now());
+      const raw = await request(s.origin + '/api/v3/klines?' + new URLSearchParams({ symbol: instrument, interval: '1d', limit: String(days + 1) }), fetchImpl);
+      return parseHistory(sourceId, raw, asOf, Date.now(), { days });
     }
     if (sourceId === 'gate') {
       const time = await request(s.origin + '/api/v4/spot/time', fetchImpl), asOf = clock(time.server_time);
-      const raw = await request(s.origin + '/api/v4/spot/candlesticks?' + new URLSearchParams({ currency_pair: instrument, interval: '1d', limit: '122' }), fetchImpl);
-      return parseHistory(sourceId, raw, asOf, Date.now());
+      const raw = await request(s.origin + '/api/v4/spot/candlesticks?' + new URLSearchParams({ currency_pair: instrument, interval: '1d', limit: String(days + 1) }), fetchImpl);
+      return parseHistory(sourceId, raw, asOf, Date.now(), { days });
     }
-    const raw = await request(s.origin + '/api/v2/spot/market/candles?' + new URLSearchParams({ symbol: instrument, granularity: '1Dutc', limit: '122' }), fetchImpl);
-    return parseHistory(sourceId, raw, clock(envelope(raw).asOf), Date.now());
+    const raw = await request(s.origin + '/api/v2/spot/market/candles?' + new URLSearchParams({ symbol: instrument, granularity: '1Dutc', limit: String(days + 1) }), fetchImpl);
+    const initial = envelope(raw), asOf = clock(initial.asOf), combined = [...initial.data];
+    let parsed = parseHistory(sourceId, raw, asOf, Date.now(), { days }), pages = 1;
+    while (days > DEFAULT_HISTORY_DAYS && parsed.bars.length && parsed.bars.length < days) {
+      const earliest = parsed.bars[0].time, remaining = days - parsed.bars.length;
+      // Sequential reads stay below the documented 20 requests/s IP ceiling.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // endTime is exclusive and aligned by Bitget to the candle boundary.
+      // Passing earliest-1 would skip the immediately preceding daily candle.
+      const page = await request(s.origin + '/api/v2/spot/market/history-candles?' + new URLSearchParams({ symbol: instrument, granularity: '1Dutc', endTime: String(earliest), limit: String(Math.min(200, remaining)) }), fetchImpl);
+      const older = envelope(page); clock(older.asOf); pages++;
+      if (!older.data.length) break; // No invented older candles or repeated empty requests.
+      combined.push(...older.data);
+      const next = parseHistory(sourceId, { ...raw, data: combined }, asOf, Date.now(), { days });
+      if (!next.bars.length || next.bars[0].time >= earliest) throw Error('Phân trang nến Bitget không lùi thời gian; chưa thể xác minh lịch sử yêu cầu');
+      parsed = next;
+      if (pages > Math.ceil(days / 200) + 1) throw Error('Phân trang nến Bitget vượt giới hạn; chưa đủ lịch sử yêu cầu');
+    }
+    return { ...parsed, coverage: { ...parsed.coverage, pages } };
   }
-  return Object.freeze({ DAY, TTL, NAMES, SOURCES, sources: SOURCES, list: () => SOURCES.map(x => ({ ...x })), number, stamp, clock, registry, parseScan, parseHistory, scanSource, history });
+  return Object.freeze({ DAY, TTL, DEFAULT_HISTORY_DAYS, MAX_HISTORY_DAYS, NAMES, SOURCES, sources: SOURCES, list: () => SOURCES.map(x => ({ ...x })), number, stamp, clock, registry, parseScan, parseHistory, scanSource, history });
 });

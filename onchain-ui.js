@@ -57,6 +57,7 @@
     if (c) {
       const changes = changedOwners(c.previous, token);
       html += '<div class="observation-note"><strong>Đối chiếu hai lần đọc thật · ' + number((token.fetchedAt - c.previous.fetchedAt) / 60000, 2) + ' phút</strong><p>Quan sát trước có ' + c.previous.rows.length + ' địa chỉ. ' + changes.length + ' địa chỉ có số dư thay đổi trong phần giao nhau. Chưa có chuỗi ngày / tuần / tháng; dữ liệu thiếu giữ nguyên là thiếu.</p>';
+      if (changes.length > 25) html += '<p class="small">Hiển thị 25/' + changes.length + ' địa chỉ thay đổi theo thứ hạng gốc; các tổng nhóm vẫn dùng toàn bộ địa chỉ quan sát được.</p>';
       if (changes.length) html += '<div class="table-scroll"><table><thead><tr><th>Hạng gốc / nhãn nguồn</th><th>Địa chỉ tài khoản</th><th>Thay đổi ' + esc(token.symbol) + '</th></tr></thead><tbody>' + changes.slice(0, 25).map(r => '<tr><td>#' + r.sourceRank + ' · ' + esc(r.providerLabel || 'Chưa có nhãn') + '</td><td>' + address(r.owner) + '</td><td>' + esc(signedRaw(r.deltaRaw, token.decimals, H)) + '</td></tr>').join('') + '</tbody></table></div>';
       html += '<p class="small">Nhãn do TonAPI cung cấp. Thay đổi số dư lưu giữ có thể đến từ chuyển nội bộ, thanh khoản hoặc nhiều hoạt động khác; chưa xác định mua/bán hay chủ sở hữu hưởng lợi.</p></div>';
     }

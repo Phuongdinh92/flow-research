@@ -19,7 +19,7 @@ function render(){
  if(!snapshot)return;
  const options={query:$('#global-search').value,period,limit:Number($('#global-limit').value)||40};let result=FlowGlobalUI.selectRows(snapshot.global.pricedRows,options),historical=false;
  if(!result.available&&Date.now()-snapshot.generatedAt>900000){result=FlowGlobalUI.selectRows(snapshot.global.pricedRows,{...options,now:snapshot.generatedAt});historical=true;}points=result.rows;
- $('#global-map').innerHTML=points.length?FlowChartsView.bubble(points,{width:Math.max(320,$('#global-map').clientWidth||1200),sizeBy:'equal',windowLabel:points[0].windowLabel}):'<div class="empty">Không có tài sản đủ dữ liệu khớp bộ lọc.</div>';
+ $('#global-map').innerHTML=points.length?FlowChartsView.bubble(points,{width:Math.max(320,$('#global-map').clientWidth||1200),sizeBy:'equal',windowLabel:points[0].windowLabel,maxItems:options.limit}):'<div class="empty">Không có tài sản đủ dữ liệu khớp bộ lọc.</div>';
  for(const n of document.querySelectorAll('[data-global-period]')){const active=n.dataset.globalPeriod===period;n.classList.toggle('selected',active);n.setAttribute('aria-pressed',String(active));}
  const times=points.map(r=>r.providerUpdatedAt).filter(Number.isFinite),old=times.length?Math.min(...times):null;
  $('#global-meta').textContent=(historical?'BẢN LƯU ĐÃ CŨ · ':'')+'Hiển thị '+points.length+'/'+result.available+' tài sản có số liệu '+{'24h':'24H','7d':'7D','30d':'30D'}[period]+' khớp bộ lọc, ưu tiên vốn hóa lớn. '+result.missing+' thiếu biến động/volume hoặc giá đã quá 15 phút tại thời điểm tham chiếu. Bóng bằng nhau để dễ đọc; màu và số là biến động giá, kích thước không thể hiện volume/vốn hóa. Thời gian cập nhật của tài sản đang hiển thị: '+(old?date(old)+' → '+date(Math.max(...times)):'chưa có')+'.';

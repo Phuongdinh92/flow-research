@@ -60,7 +60,7 @@
   }
   function summaryDaily(bars, asOf, { window = 30, now = Date.now() } = {}) {
     stamp(now); stamp(asOf);
-    if (![30, 90, 120].includes(window)) throw Error('Cửa sổ phải là 30, 90 hoặc 120 ngày');
+    if (![30, 90, 120, 180, 365].includes(window)) throw Error('Cửa sổ phải là 30, 90, 120, 180 hoặc 365 ngày');
     if (asOf - now > TTL) fail('future_history', 'Thời gian nguồn lịch sử nằm trong tương lai');
     const all = validatedBars(bars, asOf), selected = all.slice(-window), last = all.at(-1);
     for (let i = 1; i < selected.length; i++) if (selected[i].time - selected[i - 1].time !== DAY) fail('gap', 'Thiếu ngày UTC trong cửa sổ biểu đồ');
@@ -84,7 +84,7 @@
     const taker = hasTaker ? { buy: total('buy'), sell: total('sell'), delta: total('delta'), cvd: series.at(-1).cvd } : null;
     const turnover20 = twenty ? twenty.reduce((s, b) => s + b.quote, 0) / 20 : null;
     return {
-      series, bars: series, return7: change(7), return30: change(30), turnover20, turnover: turnover20,
+      series, bars: series, return7: change(7), return30: change(30), return180: change(180), return365: change(365), turnover20, turnover: turnover20,
       buyShare7, buyShare: buyShare7, taker, current, stale: !current, asOf, now, latestEnd: last.end, end: last.end,
       coverage: { availableDays: all.length, days: series.length, requestedDays: window, completeWindow: series.length === window, from: series[0].time, to: last.end, latestExpectedEnd, current, hasTaker, takerDays: series.filter(b => b.buy !== null).length, cvdResetAt: series[0].time, return7Days: tail(8) ? 8 : null, return30Days: tail(31) ? 31 : null }
     };
@@ -172,20 +172,22 @@
   function dailyMovingAverages(bars, { asOf, now = Date.now(), smaPeriod = 20, emaPeriod = 50 } = {}) {
     for (const period of [smaPeriod, emaPeriod]) if (!Number.isInteger(period) || period < 1 || period > 1000) fail('indicator_period', 'Chu kỳ trung bình động không hợp lệ');
     const all = calendarDailyBars(bars, asOf, now), series = [], resetsAt = [], streak = [];
-    const alpha = 2 / (emaPeriod + 1); let ema = null;
+    const alpha = 2 / (emaPeriod + 1), alpha200 = 2 / 201; let ema = null, ema200 = null;
     for (let i = 0; i < all.length; i++) {
       const bar = all[i];
-      if (i > 0 && bar.time - all[i - 1].time !== DAY) { streak.length = 0; ema = null; resetsAt.push(bar.time); }
+      if (i > 0 && bar.time - all[i - 1].time !== DAY) { streak.length = 0; ema = null; ema200 = null; resetsAt.push(bar.time); }
       streak.push(bar.close);
       const sma = streak.length >= smaPeriod ? num(streak.slice(-smaPeriod).reduce((s, x) => s + x, 0) / smaPeriod, 'SMA') : null;
       if (streak.length === emaPeriod) ema = num(streak.reduce((s, x) => s + x, 0) / emaPeriod, 'EMA seed');
       else if (streak.length > emaPeriod) ema = num(ema + alpha * (bar.close - ema), 'EMA');
-      const point = { time: bar.time, end: bar.end, close: bar.close, sma, ema };
+      if (streak.length === 200) ema200 = num(streak.reduce((s, x) => s + x, 0) / 200, 'EMA200 seed');
+      else if (streak.length > 200) ema200 = num(ema200 + alpha200 * (bar.close - ema200), 'EMA200');
+      const point = { time: bar.time, end: bar.end, close: bar.close, sma, ema, ema200 };
       if (smaPeriod === 20) point.sma20 = sma;
       if (emaPeriod === 50) point.ema50 = ema;
       series.push(point);
     }
-    return { series, asOf, now, periods: { sma: smaPeriod, ema: emaPeriod }, coverage: { availableDays: all.length, smaDays: series.filter(b => b.sma !== null).length, emaDays: series.filter(b => b.ema !== null).length, firstSmaTime: series.find(b => b.sma !== null)?.time ?? null, firstEmaTime: series.find(b => b.ema !== null)?.time ?? null, resetsAt, emaSeed: 'SMA of first ' + emaPeriod + ' consecutive daily closes', usesFullHistory: true } };
+    return { series, asOf, now, periods: { sma: smaPeriod, ema: emaPeriod, ema200: 200 }, coverage: { availableDays: all.length, smaDays: series.filter(b => b.sma !== null).length, emaDays: series.filter(b => b.ema !== null).length, ema200Days: series.filter(b => b.ema200 !== null).length, firstSmaTime: series.find(b => b.sma !== null)?.time ?? null, firstEmaTime: series.find(b => b.ema !== null)?.time ?? null, firstEma200Time: series.find(b => b.ema200 !== null)?.time ?? null, resetsAt, emaSeed: 'SMA of first ' + emaPeriod + ' consecutive daily closes', ema200Seed: 'SMA of first 200 consecutive daily closes', usesFullHistory: true } };
   }
   function scatter7(historiesByKey, rows, { now = Date.now() } = {}) {
     stamp(now); if (!Array.isArray(rows)) throw Error('Cần danh sách cặp/sàn');
