@@ -1,0 +1,27 @@
+# Convenience guard only: gitignore is not access control.
+# Never add private research to this public repository, including its history.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+private/
+backend/
+research/
+strategies/
+notebooks/
+wallet_labels/
+portfolio/
+*.ipynb
+*.sqlite
+*.sqlite3
+*.db
+*.csv
+*.parquet
+*.zip
+*.log
+node_modules/
+__pycache__/
+.DS_Store
