@@ -7,7 +7,7 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const DAY = 86400000, TTL = 900000;
-  const SOURCES = ['binance', 'bitget'];
+  const SOURCES = ['binance', 'bitget', 'gate', 'whitebit'];
   function num(v, name) { if (typeof v !== 'number' || !Number.isFinite(v)) throw Error((name || 'Số') + ' không hợp lệ'); return v; }
   function stamp(v) { num(v, 'Timestamp'); if (!Number.isInteger(v) || v < 946684800000 || v >= 4102444800000) throw Error('Timestamp millisecond không hợp lệ'); return v; }
   function fail(code, message) { const e = Error(message); e.code = code; throw e; }
@@ -89,6 +89,104 @@
       coverage: { availableDays: all.length, days: series.length, requestedDays: window, completeWindow: series.length === window, from: series[0].time, to: last.end, latestExpectedEnd, current, hasTaker, takerDays: series.filter(b => b.buy !== null).length, cvdResetAt: series[0].time, return7Days: tail(8) ? 8 : null, return30Days: tail(31) ? 31 : null }
     };
   }
+  function calendarDailyBars(bars, asOf, now) {
+    stamp(asOf); stamp(now);
+    if (asOf - now > TTL) fail('future_history', 'Thời gian nguồn lịch sử nằm trong tương lai');
+    if (!Array.isArray(bars) || !bars.length) fail('empty_history', 'Chưa có nến ngày đã đóng');
+    const sorted = bars.map(b => {
+      if (!b || typeof b !== 'object') fail('bar', 'Nến sai định dạng');
+      stamp(b.time); stamp(b.end);
+      if (b.time % DAY || b.end !== b.time + DAY - 1 || b.end >= Math.min(asOf, now)) fail('utc_bar', 'Nến sai ngày UTC hoặc chưa đóng');
+      for (const k of ['open', 'high', 'low', 'close']) num(b[k], k);
+      if (Math.min(b.open, b.high, b.low, b.close) <= 0 || b.high < Math.max(b.open, b.close, b.low) || b.low > Math.min(b.open, b.close, b.high)) fail('bar_values', 'OHLC của nến không hợp lệ');
+      let quote = null, buy = null;
+      if (b.quote !== null && b.quote !== undefined) { num(b.quote, 'Quote volume'); if (b.quote < 0) fail('bar_values', 'Quote volume âm'); quote = b.quote; }
+      if (b.buy !== null && b.buy !== undefined) { num(b.buy, 'Taker buy quote'); if (b.buy < 0 || quote !== null && b.buy > quote * (1 + 1e-9)) fail('buy_volume', 'Taker buy vượt quote volume hoặc âm'); buy = quote === null ? b.buy : Math.min(b.buy, quote); }
+      return { time: b.time, end: b.end, open: b.open, high: b.high, low: b.low, close: b.close, quote, buy };
+    }).sort((a, b) => a.time - b.time);
+    for (let i = 1; i < sorted.length; i++) if (sorted[i].time === sorted[i - 1].time) fail('duplicate_day', 'Nến ngày bị trùng');
+    return sorted;
+  }
+  function periodStartUTC(time, interval) {
+    const d = new Date(time), midnight = Math.floor(time / DAY) * DAY;
+    if (interval === '1d') return midnight;
+    if (interval === '1w') return midnight - ((d.getUTCDay() + 6) % 7) * DAY;
+    if (interval === '1M') return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+    fail('interval', 'Khung nến phải là 1d, 1w hoặc 1M');
+  }
+  function nextPeriodUTC(time, interval) {
+    if (interval === '1d') return time + DAY;
+    if (interval === '1w') return time + 7 * DAY;
+    const d = new Date(time); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+  }
+  function derivedFlowSeries(bars) {
+    let cvd = 0, known = true;
+    return bars.map((b, i) => {
+      const available = b.quote !== null && b.buy !== null;
+      const sell = available ? b.quote - b.buy : null, delta = available ? b.buy - sell : null;
+      if (i > 0 && b.time !== bars[i - 1].end + 1) known = false;
+      if (delta === null) known = false;
+      if (known) { cvd += delta; num(cvd, 'CVD'); }
+      return { ...b, sell, delta, cvd: known ? cvd : null };
+    });
+  }
+  /** Aggregate full closed daily history before applying a display-day window.
+   * Weeks begin Monday 00:00 UTC; months are actual calendar months.
+   * Partial boundaries and internal missing days are reported, never filled.
+   */
+  function aggregateBarsUTC(bars, { interval = '1d', asOf, now = Date.now(), windowDays = null } = {}) {
+    if (!['1d', '1w', '1M'].includes(interval)) fail('interval', 'Khung nến phải là 1d, 1w hoặc 1M');
+    if (windowDays !== null && (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 3660)) fail('window', 'Cửa sổ ngày không hợp lệ');
+    const all = calendarDailyBars(bars, asOf, now), indexed = new Map(all.map(b => [b.time, b]));
+    const firstPeriod = periodStartUTC(all[0].time, interval), lastPeriod = periodStartUTC(all.at(-1).time, interval), aggregated = [], excluded = [];
+    for (let start = firstPeriod; start <= lastPeriod; start = nextPeriodUTC(start, interval)) {
+      const next = nextPeriodUTC(start, interval), end = next - 1, expectedDays = (next - start) / DAY, constituents = [], missingDays = [];
+      for (let time = start; time < next; time += DAY) { if (indexed.has(time)) constituents.push(indexed.get(time)); else missingDays.push(time); }
+      if (missingDays.length) {
+        const first = start === firstPeriod && all[0].time > start, last = start === lastPeriod && all.at(-1).end < end;
+        excluded.push({ interval, time: start, end, code: first && last ? 'partial_boundary_period' : first ? 'partial_first_period' : last ? 'partial_last_period' : 'missing_days', expectedDays, availableDays: constituents.length, missingDays, reason: 'Thiếu ' + missingDays.length + '/' + expectedDays + ' ngày UTC; không tạo nến ' + interval });
+        continue;
+      }
+      const total = field => constituents.every(b => b[field] !== null) ? num(constituents.reduce((s, b) => s + b[field], 0), field) : null;
+      aggregated.push({ time: start, end, open: constituents[0].open, high: Math.max(...constituents.map(b => b.high)), low: Math.min(...constituents.map(b => b.low)), close: constituents.at(-1).close, quote: total('quote'), buy: total('buy'), days: expectedDays });
+    }
+    const latestExpectedEnd = periodStartUTC(now, interval) - 1, latestExpectedDailyEnd = Math.floor(now / DAY) * DAY - 1;
+    // Whole completed periods that overlap the requested day window are shown.
+    // This preserves a whole September candle when a 30-day view starts mid-month.
+    const windowFrom = windowDays === null ? null : Math.floor(now / DAY) * DAY - windowDays * DAY;
+    const selected = windowFrom === null ? aggregated : aggregated.filter(b => b.end >= windowFrom);
+    const series = derivedFlowSeries(selected), current = !!series.length && series.at(-1).end === latestExpectedEnd;
+    const reasons = {}; for (const e of excluded) reasons[e.code] = (reasons[e.code] || 0) + 1;
+    const completeSpan = series.every((b, i) => i === 0 || b.time === series[i - 1].end + 1);
+    const hasTaker = !!series.length && completeSpan && series.every(b => b.quote !== null && b.buy !== null);
+    const sum = k => num(series.reduce((s, b) => s + b[k], 0), k);
+    return {
+      series, bars: series, excluded, interval, asOf, now, current, stale: !current,
+      taker: hasTaker ? { buy: sum('buy'), sell: sum('sell'), delta: sum('delta'), cvd: series.at(-1).cvd } : null,
+      coverage: { availableDays: all.length, completePeriods: aggregated.length, displayedPeriods: series.length, excludedPeriods: excluded.length, reasons, usedDays: series.reduce((s, b) => s + b.days, 0), requestedWindowDays: windowDays, windowFrom, from: series.length ? series[0].time : null, to: series.length ? series.at(-1).end : null, latestDailyEnd: all.at(-1).end, latestExpectedDailyEnd, dailyCurrent: all.at(-1).end === latestExpectedDailyEnd, latestExpectedEnd, current, completeSpan, hasTaker, quotePeriods: series.filter(b => b.quote !== null).length, takerPeriods: series.filter(b => b.buy !== null && b.quote !== null).length, cvdResetAt: series.length ? series[0].time : null, weekStartsOn: interval === '1w' ? 'Monday UTC' : null, partialPeriodPolicy: 'exclude', windowPolicy: 'aggregate full history, then show whole completed periods overlapping the day window' }
+    };
+  }
+  /** SMA and EMA use full daily history; an EMA starts at its first SMA seed.
+   * A missing UTC day restarts warmup. No value is supplied before enough days.
+   */
+  function dailyMovingAverages(bars, { asOf, now = Date.now(), smaPeriod = 20, emaPeriod = 50 } = {}) {
+    for (const period of [smaPeriod, emaPeriod]) if (!Number.isInteger(period) || period < 1 || period > 1000) fail('indicator_period', 'Chu kỳ trung bình động không hợp lệ');
+    const all = calendarDailyBars(bars, asOf, now), series = [], resetsAt = [], streak = [];
+    const alpha = 2 / (emaPeriod + 1); let ema = null;
+    for (let i = 0; i < all.length; i++) {
+      const bar = all[i];
+      if (i > 0 && bar.time - all[i - 1].time !== DAY) { streak.length = 0; ema = null; resetsAt.push(bar.time); }
+      streak.push(bar.close);
+      const sma = streak.length >= smaPeriod ? num(streak.slice(-smaPeriod).reduce((s, x) => s + x, 0) / smaPeriod, 'SMA') : null;
+      if (streak.length === emaPeriod) ema = num(streak.reduce((s, x) => s + x, 0) / emaPeriod, 'EMA seed');
+      else if (streak.length > emaPeriod) ema = num(ema + alpha * (bar.close - ema), 'EMA');
+      const point = { time: bar.time, end: bar.end, close: bar.close, sma, ema };
+      if (smaPeriod === 20) point.sma20 = sma;
+      if (emaPeriod === 50) point.ema50 = ema;
+      series.push(point);
+    }
+    return { series, asOf, now, periods: { sma: smaPeriod, ema: emaPeriod }, coverage: { availableDays: all.length, smaDays: series.filter(b => b.sma !== null).length, emaDays: series.filter(b => b.ema !== null).length, firstSmaTime: series.find(b => b.sma !== null)?.time ?? null, firstEmaTime: series.find(b => b.ema !== null)?.time ?? null, resetsAt, emaSeed: 'SMA of first ' + emaPeriod + ' consecutive daily closes', usesFullHistory: true } };
+  }
   function scatter7(historiesByKey, rows, { now = Date.now() } = {}) {
     stamp(now); if (!Array.isArray(rows)) throw Error('Cần danh sách cặp/sàn');
     const points = [], excluded = [], repeated = duplicates(rows);
@@ -167,5 +265,5 @@
       xUnit: 'fraction', yUnit: 'fraction', lastEnd: points.length ? latestExpectedEnd : null, now
     };
   }
-  return Object.freeze({ DAY, TTL, scatter24, summaryDaily, summarizeDaily: summaryDaily, scatter7, scatter7Summary });
+  return Object.freeze({ DAY, TTL, scatter24, summaryDaily, summarizeDaily: summaryDaily, aggregateBarsUTC, dailyMovingAverages, scatter7, scatter7Summary });
 });

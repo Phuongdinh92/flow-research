@@ -1,72 +1,85 @@
-# Flow Research — Crypto Market Observatory v0.5
+# Flow Research — Market Observatory v0.6
 
-Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.5.2 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
+Public site: https://phuongdinh92.github.io/flow-research/
 
-## Implemented
+This version expands the verified data scope and chart controls. It is a descriptive research interface; wallet attribution, proprietary A1Radar models, strategy backtests and investment rankings are not implemented.
 
-- `market.js`: read-only Binance Spot + Bitget Spot public adapters. Discovers eligible active USDT instruments from source metadata instead of a fixed 25/30-symbol list.
-- Bitget V3 explicitly classifies crypto/stock products; only `category=SPOT`, `status=online`, `symbolType=crypto`, `instrumentType=crypto`, `quoteCoin=USDT` qualify. Regional `areaSymbol` is not used to infer asset type.
-- Binance exchangeInfo establishes active spot/USDT eligibility but supplies no underlying asset-class label in the observed registry. This universe is not certified crypto-only; ticker suffixes are not a reliable stock/ETF classifier. Bitget uses its explicit crypto classification.
-- Each venue/instrument has a separate key. Shared tickers do not establish common chain/contract identity. No cross-venue asset or taker-percentage aggregation.
-- Search, venue filters, sorting, pagination, per-source coverage and errors. Every row retains the source timestamp; ticker age over 15 minutes is labelled stale.
-- On-demand daily UTC history, completed candles only. Current 30D statistics require 31 consecutive daily bars ending on the latest closed UTC day; a 7D chart can use eight continuous closes while longer unavailable statistics remain null. Binance taker buy is descriptive; the Bitget candle field is unavailable and remains null.
-- `collect_market.py`: standard-library public snapshot collector, row validation, source failures, normalized records, endpoint/time/SHA256 provenance, atomic replacement. If all sources fail it preserves the prior snapshot. If one succeeds a partial new snapshot contains only that run's valid rows; the failed source is recorded, not relabelled as fresh.
-- Existing snapshots are optional for the UI. A failed/absent snapshot does not prevent a user-requested direct API scan. A delayed saved response cannot overwrite a newer scan.
+## Separate data scopes
 
-## Charts restored and added
+| Layer | Verified saved coverage on 2026-10-16 | Meaning |
+| --- | --- | --- |
+| Venue spot/USDT | Binance 511, Bitget 504, Gate 2,051, WhiteBIT 328 | 3,394 venue/instrument rows, not 3,394 unique coins |
+| Aggregated USD markets | 1,000 unique CoinGecko asset IDs, four market-cap ordered pages | Provider-aggregated prices and 24H/7D/30D changes; not independent wallet evidence |
+| Catalog | 22,307 CoinGecko identities | A catalog count, not a claim that every identity has current price or flow data |
+| Binance daily taker summary | 489 valid / 511 checked; 22 short-history exclusions | 31 continuous completed UTC days; weighted buy quote share and close-to-close changes |
+| Ecosystem context | 425 chain TVL rows, 209 chain stablecoin valuation rows; 3,244 global historical dates | DefiLlama TVL and USD stablecoin valuations, not net token purchases |
 
-- 24H market bubbles, with area proportional to venue quote turnover. Shows up to 80 highest-turnover pairs on desktop or 24 on narrow screens; filtering applies before selection. Deterministic circle packing preserves area ratios without overlaps; small circles keep exact accessible tooltips and only show labels when space permits. The alternate scatter plots all usable pairs with price change and log10 USDT turnover.
-- Restored seven-day Binance taker-buy/price-change scatter, using broad closed-day summaries plus any newer on-demand histories. Coverage, history failures, and the latest closed UTC day are explicit. Bitget is excluded from this specific metric because its candle endpoint does not supply taker-buy quote volume.
-- Per-pair OHLC candles with quote-volume pane, daily aggressor buy-minus-sell bars over a separately scaled closing-price line, and cumulative aggressor delta (CVD). Windows 30/90/120 reset CVD to zero before the first displayed day.
-- `charts-core.js` validates units, source identity, UTC continuity, rollover freshness and retained summary arithmetic; `charts-view.js` renders accessible SVG with exact-value tooltips and keyboard/click navigation.
-- `collect_flow.py` reads every available Binance venue pair from the market snapshot (not a fixed token shortlist), validates 31 completed daily candles and retains independently checkable endpoint prices, quote totals and response hashes in `data/flow-snapshot.json`. Insufficient listing history and upstream errors remain explicit exclusions. It does not rank investment opportunities.
-- Six independently reconciled BTC/W/STRK histories across the two venues are included in `data/history-snapshot.json`; current pair detail can refresh directly from the source. A saved chart is explicitly labelled historical if it no longer meets the latest closed-day or ticker freshness rules.
+The provider global endpoint's active-asset/exchange counts and catalog count are distinct observations with different definitions and timestamps. Exact-name chain joins produce 452 records; this is not a certified count of distinct blockchains. Missing values remain null.
 
-## Public and private boundaries
+No layer is presented as complete coverage of all exchanges, DEXs, chains, assets or wallets. Aggregated USD volume is kept separate from each venue's USDT quote turnover and is never added to it. Shared ticker names do not establish common contract identity.
 
-This repository contains public descriptive market data and implementation only. It has no private strategy model, secret scoring parameters, classified wallet list, credentials, personal portfolio, authenticated backend, or trading operations. Any files delivered to a browser can be inspected and copied.
+## Data quality and access
 
-This version is not A1Radar's ASI and does not confirm whale accumulation. No blockchain collectors, wallet holding histories, wallet clusters, strategy backtests, validated forecasts, or investment rankings have been implemented here. Multiple exchanges alone do not establish who bought or retained tokens.
+- `market.js` shares the same public parsers between browser and collector. Source metadata determines eligible active spot/USDT instruments; there is no 30-symbol shortlist.
+- Bitget explicitly classifies crypto products. The observed Binance/Gate/WhiteBIT registries do not establish underlying asset class; spot eligibility is not a crypto-only classifier. No speculative ticker suffix blacklist is used.
+- Gate supplies a response clock rather than an update timestamp for every instrument. WhiteBIT supplies receipt time and has no browser CORS permission. These limitations are labeled; a current response does not establish when an illiquid instrument last traded.
+- Browser scans read the three CORS-enabled venues. WhiteBIT remains a source-dated server snapshot; it is not counted as a successful browser API call.
+- Ticker/price observations older than 15 minutes are excluded from current maps. If every usable saved observation has aged out, a saved-time view is explicitly labeled historical. CoinGecko freshness uses each asset's own provider update time; ancient rows with apparently nonzero volume are not treated as current.
+- Failed source requests preserve prior data with its original dates and error. HTTP/HTML block responses never become market records. Zero, missing data, unsupported fields and source failures remain distinct.
+- Snapshot outputs include source URLs, receipt times and SHA-256 hashes of decoded response bodies. Raw audit receipts are retained outside the website source during collection; normalized outputs alone are not a fully replayable research archive.
 
-## Evidence and limits
+## Charts
 
-The collector records raw response **hashes and safe response metadata**, not complete raw response bodies. Normalized exports are useful for inspection but do not by themselves provide a fully replayable market research dataset. Coverage denominators count eligible venue instruments, not unique crypto assets or a percentage of the whole market.
+- Readable equal-size bubbles by default. Size has no volume/market-cap meaning in this mode. The venue map also offers exact area-proportional quote-turnover sizing. Selection, number shown and denominator are explicit.
+- CoinGecko maps switch between provider 24H, 7D and 30D returns. These rolling changes are distinct from calendar candle intervals.
+- Venue detail supports real daily, Monday-start weekly and calendar-month UTC candles, plus a separate quote-volume pane. Full daily history is aggregated first; partial boundary periods and missing-day periods are excluded. Complete periods overlapping the chosen 30/90/120-day window are shown intact.
+- Binance taker delta and CVD require actual buy quote volume. Bitget/Gate histories do not supply it; WhiteBIT daily history is unsupported. Missing taker values never become zero.
+- CVD resets at the beginning of the displayed series and becomes unknown after a gap. Aggressor imbalance is not cash deposited, wallet inventory or whale accumulation.
+- Optional SMA20 and SMA-seeded EMA50 use all available daily history before display slicing. Week/month overlays sample the last daily value of the completed period. Gaps restart warmup. There is no EMA200 with only 121 daily observations and these averages are not holder-cost SmartBands.
+- Global stablecoin history is USD valuation of circulating quantities across peg types. Changes may reflect issuance/redemption, valuation, FX or depeg effects. They are not labeled cash inflows into altcoins. TVL changes are not deposits minus withdrawals.
+- The evidence panel lists every A1 reference category, its actual implementation state, and missing inputs. No simulated holder cohorts, clusters, whale signals or score axes are supplied.
 
-Direct access may fail because of geography, CORS, provider restrictions, rate limits, or network errors. HTTP/HTML errors do not become successful market data. Missing values remain missing; numeric zero is preserved. The source's ticker timestamp represents a generated ticker update, not necessarily the time of the last trade.
+## Maintenance
 
-No scheduled collection or trading has been enabled. Nothing runs when the page is closed. No GitHub Actions workflow is included in this change.
+Website users need no Python, installation, API account or downloaded file.
 
-## Offline validation
-
-Run without network access:
+The current four-venue collector reuses the exact browser adapters:
 
 ```text
-node test-market.cjs
-node test-ui.cjs
-node test-charts.cjs
-node test-view.cjs
+node collect_public.cjs
+```
+
+`collect_market.py` remains the earlier two-venue collector and its isolated validation fixtures; use `collect_public.cjs` for this release's full enabled venue set.
+
+The Binance history collector can resume verified same-UTC-day cached responses without changing their original receipt time:
+
+```text
+python -m pip install -r requirements-flow.txt
+python collect_flow.py
+```
+
+`FlowEcosystem.refresh(previousSnapshot)` refreshes four CoinGecko price pages and global statistics at an eight-second request gap. It stops on HTTP/CORS/rate-limit failures without retrying or replacing previous data. Catalog, TVL and stablecoin observations retain their original source times; assembly time does not make them newly fetched.
+
+No scheduled collector or trading operation is enabled. Nothing collects data while the browser is closed. No private strategy, credentials, portfolio, wallet labels or authenticated research backend is included. Browser-delivered files can be inspected.
+
+## Verification
+
+```text
+node --test test-market.cjs test-ui.cjs test-charts.cjs test-view.cjs test-ecosystem.cjs test-global-ui.cjs
 python collect_market.py --self-test
 python -m unittest test_flow
 ```
 
-The 13 adapter, 14 UI, 17 chart arithmetic, 12 SVG rendering, 9 market-collector and 12 history-collector checks pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live market collection on 2026-10-16 returned 511/511 eligible Binance pairs and 504/504 Bitget pairs. Broad Binance daily collection checked all 511 available pairs: 489 had 31 continuous completed UTC days and 22 lacked sufficient history. Every retained record was reconciled against its raw response. The saved snapshots load through the production validators. The chart summaries are independently reconciled against source response values; browser verification is also performed on the published version.
+Checks cover source identity, units, partial failures, freshness, true calendar boundaries (including leap-year February), missing-day behavior, CVD reset, indicator warmup, USD-vs-USDT separation, exact area scaling and accessible rendering. All 489 Binance summaries and all 1,000 normalized USD market records were independently reconciled against retained responses. Gate weekly/monthly aggregation was independently replayed with Python Decimal and calendar boundaries. Software checks do not establish prediction performance.
 
-Maintainers running the broad history collector need its pinned HTTP dependency. Website users do not need Python:
+## Primary specifications
 
-```text
-python -m pip install -r requirements-flow.txt
-python collect_market.py
-python collect_flow.py
-```
-
-History collection uses four persistent connections with globally paced requests. Rate-limit or access-block responses stop collection; completed records are checkpointed so an interrupted run can resume on the same UTC day while retaining original fetch times.
-
-## Source specifications
-
-- [Binance market-data-only service](https://developers.binance.com/en/docs/products/spot/faqs/market_data_only)
-- [Binance REST market data](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints)
-- [Bitget V3 instruments and product types](https://www.bitget.com/docs/catalog/market/market-data)
-- [Bitget spot tickers](https://www.bitget.com/api-doc/spot/market/Get-Tickers)
-- [Bitget spot candles](https://www.bitget.com/api-doc/spot/market/Get-Candle-Data)
-
-Open the website directly; no Python installation or file download is required to use it. The source collector is included for maintaining auditable public snapshots.
+- https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints
+- https://www.bitget.com/docs/catalog/market/market-data
+- https://www.bitget.com/api-doc/spot/market/Get-Candle-Data
+- https://www.gate.com/docs/developers/apiv4/en/
+- https://docs.whitebit.com/public/http-v4/
+- https://docs.coingecko.com/demo/reference/coins-markets
+- https://docs.coingecko.com/demo/reference/crypto-global
+- https://api-docs.defillama.com/llms-free.txt
+- https://docs.a1radar.com/vi/features/holder-flow-index

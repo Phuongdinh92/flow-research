@@ -72,5 +72,26 @@ test('adapters request broad discovery and daily UTC endpoints', async () => {
   assert.equal((await M.scanSource('binance',fetcher)).rows.length,1);assert.equal((await M.scanSource('bitget',fetcher)).rows.length,1);await M.history('binance','BTCUSDT',fetcher);await M.history('bitget','BTCUSDT',fetcher);
   assert(seen.some(u=>u.includes('instruments?category=SPOT')));assert(seen.some(u=>u.includes('granularity=1Dutc')));assert(seen.some(u=>u.includes('interval=1d')));assert(!seen.some(u=>u.includes('proxy')));
 });
+test('Gate registry and tickers preserve native instrument keys, percent units and response-clock quality',()=>{
+ const meta=[{id:'BTC_USDT',base:'BTC',quote:'USDT',trade_status:'tradable',type:'normal'},{id:'PRE_USDT',base:'PRE',quote:'USDT',trade_status:'tradable',type:'premarket'},{id:'OFF_USDT',base:'OFF',quote:'USDT',trade_status:'untradable',type:'normal'}];
+ const r=M.parseScan('gate',meta,[{currency_pair:'BTC_USDT',last:'100',change_percentage:'2.5',base_volume:'999',quote_volume:'25000'}],now,now);assert.equal(r.instrumentCount,1);assert.equal(r.rows[0].key,'gate:BTC_USDT');assert.equal(r.rows[0].return24,.025);assert.equal(r.rows[0].turnover24,25000);assert.equal(r.rows[0].timestampKind,'source_response');assert.equal(r.rows[0].asOf,now);assert.equal(r.capabilities.perInstrumentTimestamp,false);assert.equal(r.excludedCount,2);
+ const dup=M.parseScan('gate',meta,[{currency_pair:'BTC_USDT'},{currency_pair:'BTC_USDT'}],now,now);assert.equal(dup.rows.length,0);assert.match(dup.errors[0].message,/trùng/);
+});
+test('Gate daily candle field order, seconds, quote volume and closed flag are validated',()=>{
+ const gate=(time=day,flag='true')=>[String(time/1000),'5000','100','110','80','90','50',flag];
+ const r=M.parseHistory('gate',[gate(today,'false'),gate()],now,now);assert.equal(r.bars.length,1);assert.equal(r.dropped,1);assert.deepEqual(r.bars[0],{time:day,end:day+M.DAY-1,open:90,high:110,low:80,close:100,quote:5000,buy:null});
+ assert.equal(M.parseHistory('gate',[gate(day,'false')],now,now).bars.length,0);assert.throws(()=>M.parseHistory('gate',[gate(day,'maybe')],now,now));assert.throws(()=>M.parseHistory('gate',[gate(day+3600000)],now,now));
+});
+test('WhiteBIT exact quote volume, percent and spot filtering keep missing source time explicit',()=>{
+ const meta=[{name:'BTC_USDT',stock:'BTC',money:'USDT',type:'spot',tradesEnabled:true},{name:'BTC_PERP',stock:'BTC',money:'USDT',type:'futures',tradesEnabled:true},{name:'OFF_USDT',stock:'OFF',money:'USDT',type:'spot',tradesEnabled:false}];
+ const ticker={BTC_USDT:{last_price:'100',quote_volume:'15000',base_volume:'999',change:'-2',isFrozen:false},BTC_PERP:{last_price:'200'}};
+ const r=M.parseScan('whitebit',meta,ticker,now,now);assert.equal(r.rows.length,1);assert.equal(r.rows[0].key,'whitebit:BTC_USDT');assert.equal(r.rows[0].return24,-.02);assert.equal(r.rows[0].turnover24,15000);assert.equal(r.rows[0].timestampKind,'response_received');assert.equal(r.capabilities.browserDirect,false);assert.equal(r.supportsDaily,false);assert.equal(r.excludedCount,2);
+ ticker.BTC_USDT.isFrozen=true;const frozen=M.parseScan('whitebit',meta,ticker,now,now);assert.equal(frozen.rows.length,0);assert.equal(frozen.errors.length,1);assert.throws(()=>M.parseScan('whitebit',meta,[],now,now));
+});
+test('new adapters use only their documented public origin and unsupported history sends no request',async()=>{
+ const seen=[];const response=data=>({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>data});
+ const fetcher=async url=>{seen.push(url);if(url.includes('/spot/time'))return response({server_time:Date.now()});if(url.includes('currency_pairs'))return response([{id:'BTC_USDT',base:'BTC',quote:'USDT',trade_status:'tradable',type:'normal'}]);if(url.includes('/spot/tickers'))return response([{currency_pair:'BTC_USDT',last:'100',quote_volume:'10000',change_percentage:'1'}]);if(url.includes('/public/markets'))return response([{name:'BTC_USDT',stock:'BTC',money:'USDT',type:'spot',tradesEnabled:true}]);return response({BTC_USDT:{last_price:'100',quote_volume:'10000',change:'1',isFrozen:false}});};
+ assert.equal((await M.scanSource('gate',fetcher)).rows.length,1);assert.equal((await M.scanSource('whitebit',fetcher)).rows.length,1);assert(seen.every(u=>u.startsWith('https://api.gateio.ws/')||u.startsWith('https://whitebit.com/')));const n=seen.length;await assert.rejects(()=>M.history('whitebit','BTC_USDT',fetcher),/chưa hỗ trợ/);assert.equal(seen.length,n);assert.equal(M.NAMES.gate,'Gate');assert.equal(M.list().length,M.SOURCES.length);
+});
 
 (async()=>{for(const t of tests){await t.fn();console.log('ok - '+t.name);}console.log(tests.length+' meaningful market tests passed');})().catch(e=>{console.error(e);process.exitCode=1;});

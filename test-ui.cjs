@@ -37,11 +37,11 @@ test('malformed identifiers, duplicate keys, zero price and fake future timestam
  assert.throws(()=>U.validateSnapshot(snapshot([source('binance',{rows:[row(),row()]})]),now));
 });
 
-function domHarness(initialFetch,scanSource,history=async id=>({bars:bars().map(b=>({...b,buy:id==='bitget'?null:b.buy})),asOf:now,fetchedAt:now,dropped:1})){
- const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close','overview-chart','overview-meta','view-bubbles','view-scatter','chart-exclusions','flow-chart','flow-meta','flow-exclusions','history-count','load-history','cancel-history','history-status'];
+function domHarness(initialFetch,scanSource,history=async id=>({bars:bars().map(b=>({...b,buy:id==='bitget'?null:b.buy})),asOf:now,fetchedAt:now,dropped:1}),sourceList){
+ const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close','overview-chart','overview-meta','view-bubbles','view-scatter','chart-exclusions','flow-chart','flow-meta','flow-exclusions','bubble-size','bubble-count','history-count','load-history','cancel-history','history-status'];
  class Element{constructor(id){this.id=id;this.value=id==='source'?'all':id==='sort'?'turnover24':'';this.textContent=id==='log'?'Chưa gửi yêu cầu mạng.':'';this.innerHTML='';this.handlers={};this.open=false;}addEventListener(k,f){this.handlers[k]=f;}showModal(){this.open=true;}close(){this.open=false;}}
  const nodes=Object.fromEntries(ids.map(id=>[id,new Element(id)])),nav=new Element('nav');
- const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowCharts:require('./charts-core.js'),FlowChartsView:require('./charts-view.js'),FlowMarket:{scanSource,history},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
+ const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowCharts:require('./charts-core.js'),FlowChartsView:require('./charts-view.js'),FlowMarket:{scanSource,history,...(sourceList?{SOURCES:sourceList}:{})},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('./market-ui.js','utf8'),ctx);return {nodes,ctx};
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -66,19 +66,40 @@ test('restored map loads source-valid broad summaries and Bitget filter never bo
 });
 test('market points open real candle, delta and window-reset CVD charts',async()=>{
  const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes['overview-chart'].handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.equal(h.nodes.detail.open,true);assert.match(h.nodes['detail-body'].innerHTML,/chart-candle-body/);
- h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'delta'}})}});assert.match(h.nodes['detail-body'].innerHTML,/chart-price-overlay/);
- h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'cvd'}})}});assert.match(h.nodes['detail-body'].innerHTML,/chart-cvd-line/);assert.match(h.nodes['detail-body'].innerHTML,/mốc|CVD cộng dồn từ 0/);
- h.nodes['detail-body'].handlers.change({target:{matches:()=>true,value:'90'}});assert.match(h.nodes['detail-body'].innerHTML,/31\/90 ngày/);
+ h.nodes['detail-body'].handlers.click({target:{closest:sel=>sel==='[data-chart-mode]'?({dataset:{chartMode:'delta'}}):null}});assert.match(h.nodes['detail-body'].innerHTML,/chart-price-overlay/);
+ h.nodes['detail-body'].handlers.click({target:{closest:sel=>sel==='[data-chart-mode]'?({dataset:{chartMode:'cvd'}}):null}});assert.match(h.nodes['detail-body'].innerHTML,/chart-cvd-line/);assert.match(h.nodes['detail-body'].innerHTML,/mốc|CVD cộng dồn từ 0/);
+ h.nodes['detail-body'].handlers.change({target:{matches:sel=>sel==='[data-detail-window]',value:'90'}});assert.match(h.nodes['detail-body'].innerHTML,/31\/90 ngày/);
 });
 test('cached-history source failure warning survives chart and window changes',async()=>{
  const old={bars:bars(),asOf:now,fetchedAt:now-600001,dropped:1};
  const fetcher=async url=>({ok:true,json:async()=>url.includes('history-snapshot')?{schemaVersion:1,histories:{'binance:BTCUSDT':old}}:url.includes('flow-snapshot')?flowSnapshot():snapshot([source()])});
  const h=domHarness(fetcher,async id=>source(id),async()=>{throw Error('HTTP403');});await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
- h.nodes['detail-body'].handlers.click({target:{closest:()=>({dataset:{chartMode:'cvd'}})}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
- h.nodes['detail-body'].handlers.change({target:{matches:()=>true,value:'120'}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
+ h.nodes['detail-body'].handlers.click({target:{closest:sel=>sel==='[data-chart-mode]'?({dataset:{chartMode:'cvd'}}):null}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
+ h.nodes['detail-body'].handlers.change({target:{matches:sel=>sel==='[data-detail-window]',value:'120'}});assert.match(h.nodes['detail-body'].innerHTML,/Đọc mới thất bại: HTTP403/);
 });
 test('Bitget daily detail leaves taker charts unavailable instead of zero-filled',async()=>{
  const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'bitget:BTCUSDT'}})}});await flush();assert.match(h.nodes['detail-body'].innerHTML,/Nguồn nến Bitget không có dữ liệu taker/);assert.match(h.nodes['detail-body'].innerHTML,/data-chart-mode="cvd" disabled/);
+});
+
+
+test('weekly and calendar-month controls show complete periods and retain daily indicators',async()=>{
+ const long=Array.from({length:121},(_,i)=>{const time=today-(121-i)*DAY,close=100+i;return {time,end:time+DAY-1,open:close-1,high:close+2,low:close-2,close,quote:10,buy:6};});
+ const h=domHarness(routeFetch,async id=>source(id),async()=>({bars:long,asOf:now,fetchedAt:now,dropped:1}));await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();
+ assert.match(h.nodes['detail-body'].innerHTML,/chart-ema50/);
+ h.nodes['detail-body'].handlers.change({target:{matches:sel=>sel==='[data-detail-interval]',value:'1w'}});assert.match(h.nodes['detail-body'].innerHTML,/nến tuần hoàn chỉnh/);
+ h.nodes['detail-body'].handlers.change({target:{matches:sel=>sel==='[data-detail-interval]',value:'1M'}});assert.match(h.nodes['detail-body'].innerHTML,/nến tháng hoàn chỉnh/);assert.match(h.nodes['detail-body'].innerHTML,/chart-ema50/);
+});
+test('gapped daily history keeps valid complete calendar periods while summary stats remain missing',async()=>{
+ const long=Array.from({length:121},(_,i)=>{const time=today-(121-i)*DAY,close=100+i;return {time,end:time+DAY-1,open:close-1,high:close+2,low:close-2,close,quote:10,buy:6};}).filter((_,i)=>i!==100);
+ const h=domHarness(routeFetch,async id=>source(id),async()=>({bars:long,asOf:now,fetchedAt:now,dropped:1}));await flush();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();
+ h.nodes['detail-body'].handlers.change({target:{matches:sel=>sel==='[data-detail-interval]',value:'1M'}});assert.match(h.nodes['detail-body'].innerHTML,/Chuỗi ngày thiếu hoặc không liên tục/);assert.match(h.nodes['detail-body'].innerHTML,/chart-candle-body/);assert.match(h.nodes['detail-body'].innerHTML,/nến tháng hoàn chỉnh/);
+});
+
+
+test('four-venue scans preserve the dated snapshot-only source without attempting forbidden browser fetches',async()=>{
+ const ids=['binance','bitget','gate','whitebit'],calls=[];
+ const h=domHarness(async()=>({ok:true,json:async()=>snapshot(ids.map(id=>source(id)))}),async id=>{calls.push(id);return source(id);},undefined,ids.map(id=>({id,name:U.NAMES[id],capabilities:{browserDirect:id!=='whitebit'}})));
+ await flush();await h.nodes.load.handlers.click();assert.deepEqual(calls.sort(),['binance','bitget','gate']);assert.equal(h.nodes.count.textContent,'4');assert.equal(h.nodes['source-count'].textContent,'4 / 4');assert.match(h.nodes.status.textContent,/3\/3 nguồn/);assert.match(h.nodes.status.textContent,/1 nguồn chỉ dùng bản thu thập máy chủ/);
 });
 
 (async()=>{for(const t of tests){await t.fn();console.log('ok - '+t.name);}console.log(tests.length+' meaningful UI tests passed');})().catch(e=>{console.error(e);process.exitCode=1;});
