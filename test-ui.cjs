@@ -64,6 +64,25 @@ test('restored map loads source-valid broad summaries and Bitget filter never bo
  const h=domHarness(routeFetch,async id=>source(id));await flush();assert.match(h.nodes['flow-chart'].innerHTML,/data-key="binance:BTCUSDT"/);assert.match(h.nodes['overview-chart'].innerHTML,/data-key="bitget:BTCUSDT"/);
  h.nodes.source.value='bitget';h.nodes.source.handlers.change();assert.match(h.nodes['flow-chart'].innerHTML,/không có trường taker/);assert.match(h.nodes.table.innerHTML,/Bitget/);assert.doesNotMatch(h.nodes['overview-chart'].innerHTML,/data-key="binance:/);
 });
+test('Binance flow coverage follows all four venue filters and the searched universe',async()=>{
+ const ids=['binance','bitget','gate','whitebit'];
+ const fetcher=async url=>({ok:true,json:async()=>url.includes('flow-snapshot')?flowSnapshot():url.includes('history-snapshot')?{schemaVersion:1,histories:{}}:snapshot(ids.map(id=>source(id)))});
+ const h=domHarness(fetcher,async id=>source(id),undefined,ids.map(id=>({id,name:U.NAMES[id]})));await flush();
+ for(const id of ['all','binance']){
+  h.nodes.source.value=id;h.nodes.source.handlers.change();
+  assert.match(h.nodes['flow-meta'].textContent,/^1\/2 cặp Binance/);
+  assert.equal(h.nodes['load-history'].disabled,false);
+ }
+ h.nodes.search.value='BTC';h.nodes.search.handlers.input();assert.match(h.nodes['flow-meta'].textContent,/^1\/1 cặp Binance/);
+ h.nodes.search.value='';h.nodes.search.handlers.input();
+ for(const id of ['bitget','gate','whitebit']){
+  h.nodes.source.value=id;h.nodes.source.handlers.change();
+  assert.match(h.nodes['flow-meta'].textContent,/^0\/0 cặp Binance/);
+  assert.match(h.nodes['flow-chart'].innerHTML,/không có trường taker/);
+  assert.doesNotMatch(h.nodes['flow-chart'].innerHTML,/data-key="binance:/);
+  assert.equal(h.nodes['load-history'].disabled,true);
+ }
+});
 test('market points open real candle, delta and window-reset CVD charts',async()=>{
  const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes['overview-chart'].handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.equal(h.nodes.detail.open,true);assert.match(h.nodes['detail-body'].innerHTML,/chart-candle-body/);
  h.nodes['detail-body'].handlers.click({target:{closest:sel=>sel==='[data-chart-mode]'?({dataset:{chartMode:'delta'}}):null}});assert.match(h.nodes['detail-body'].innerHTML,/chart-price-overlay/);

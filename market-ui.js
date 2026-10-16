@@ -70,7 +70,7 @@ function renderCharts(){
  $('#chart-exclusions').textContent=broad.excluded.length?broad.excluded.map(e=>(e.key||'Không rõ mã')+': '+e.reason).join('\n'):'Không có cặp bị loại trong tập ticker đang lọc. Các cặp thiếu từ lúc đọc nguồn được ghi tại bảng độ phủ.';
  let fromSummary=state.flowSnapshot?C.scatter7Summary(state.flowSnapshot,rows,{now}):null,fromHistory=C.scatter7(state.histories,rows,{now});
  let merged=new Map((fromSummary?.points||[]).map(p=>[p.key,p]));for(const p of fromHistory.points){if(!merged.has(p.key)||p.fetchedAt>=merged.get(p.key).fetchedAt)merged.set(p.key,p);}
- const flow=[...merged.values()],inScope=rows.filter(r=>r.sourceId==='binance').length,eligible=!$('#search').value.trim()&&$('#source').value!=='bitget'?(state.sources.find(s=>s.sourceId==='binance')?.instrumentCount||inScope):inScope;
+ const flow=[...merged.values()],inScope=rows.filter(r=>r.sourceId==='binance').length,eligible=!$('#search').value.trim()&&['all','binance'].includes($('#source').value)?(state.sources.find(s=>s.sourceId==='binance')?.instrumentCount||inScope):inScope;
  $('#flow-chart').className=flow.length?'chart-box flow-chart':'chart-box empty';$('#flow-chart').innerHTML=flow.length?V.scatter(flow,{kind:'7d',width:chartWidth}):'<strong>Chưa có chuỗi Binance phù hợp để vẽ</strong><p>'+(!['all','binance'].includes($('#source').value)?'Nguồn '+U.NAMES[$('#source').value]+' này không có trường taker mua để vẽ bản đồ Binance.':'Đang đọc bản lưu lịch sử; có thể bấm cập nhật lịch sử theo bộ lọc.')+'</p>';
  $('#load-history').disabled=state.historyBusy||!['all','binance'].includes($('#source').value);
  const ends=flow.map(p=>p.end),last=ends.length?Math.max(...ends):null;
