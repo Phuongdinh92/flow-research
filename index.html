@@ -7,24 +7,24 @@
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://data-api.binance.vision https://api.bitget.com https://api.gateio.ws https://api.coingecko.com https://tonapi.io; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>Flow Research · Crypto Market Research</title>
-<link rel="stylesheet" href="style.css?v=8">
-<script defer src="market.js?v=8"></script>
-<script defer src="charts-core.js?v=8"></script>
-<script defer src="charts-view.js?v=8"></script>
-<script defer src="ecosystem.js?v=8"></script>
-<script defer src="global-ui.js?v=8"></script>
-<script defer src="market-ui.js?v=8"></script>
-<script defer src="holders.js?v=8"></script>
-<script defer src="dex-evidence.js?v=8"></script>
-<script defer src="onchain-ui.js?v=8"></script>
-<script defer src="signal-core.js?v=8"></script>
-<script defer src="instrument-classes.js?v=8"></script>
-<script defer src="research-ui.js?v=8"></script>
+<link rel="stylesheet" href="style.css?v=81">
+<script defer src="market.js?v=81"></script>
+<script defer src="charts-core.js?v=81"></script>
+<script defer src="charts-view.js?v=81"></script>
+<script defer src="ecosystem.js?v=81"></script>
+<script defer src="global-ui.js?v=81"></script>
+<script defer src="market-ui.js?v=81"></script>
+<script defer src="holders.js?v=81"></script>
+<script defer src="dex-evidence.js?v=81"></script>
+<script defer src="onchain-ui.js?v=81"></script>
+<script defer src="signal-core.js?v=81"></script>
+<script defer src="instrument-classes.js?v=81"></script>
+<script defer src="research-ui.js?v=81"></script>
 </head>
 <body>
-<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.8</span></header>
+<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.8.1</span></header>
 <main>
-<div class="hero"><div><div class="eyebrow">CRYPTO MARKET OBSERVATORY</div><h1>Nhìn thị trường.<br><span>Đối chiếu giao dịch và số dư.</span></h1><p class="lead">Khám phá giá ngày, tuần, tháng; mở từng cặp để xem nến và lực khớp lệnh. Đối chiếu thêm số dư top địa chỉ trên TON và giao dịch DEX Ethereum. Mỗi lớp ghi rõ nguồn, thời điểm và phạm vi thực tế.</p></div><div class="hero-actions"><button id="load" class="primary">Quét dữ liệu mới ↗</button><p class="small">4 sàn kết nối + tham chiếu CoinGecko · Không cần tài khoản sàn</p></div></div>
+<div class="hero"><div><div class="eyebrow">CRYPTO MARKET OBSERVATORY</div><h1>Nhìn thị trường.<br><span>Đối chiếu giao dịch và số dư.</span></h1><p class="lead">Khám phá giá ngày, tuần, tháng; mở từng cặp để xem nến và lực khớp lệnh. Đối chiếu thêm số dư top địa chỉ trên TON và giao dịch DEX Ethereum. Mỗi lớp ghi rõ nguồn, thời điểm và phạm vi thực tế.</p></div><div class="hero-actions"><button id="load" class="primary">Cập nhật giá các sàn ↗</button><p class="small">3 sàn đọc trực tiếp · WhiteBIT dùng bản thu thập có thời điểm</p></div></div>
 <div id="status" class="status" role="status" aria-live="polite">Đang kiểm tra bản dữ liệu đã lưu…</div>
 <div class="metrics"><article><span>CẶP / SÀN CÓ DỮ LIỆU</span><strong id="count">—</strong><small>Cùng mã ở nhiều sàn được đếm riêng</small></article><article><span>NGUỒN CÓ DỮ LIỆU</span><strong id="source-count">—</strong><small id="coverage-sub">Chưa kiểm tra kết nối</small></article><article><span>DỮ LIỆU THỊ TRƯỜNG</span><strong id="asof" class="small-value">—</strong><small id="fetched">Thời điểm do nguồn ghi nhận</small></article><article><span>BẰNG CHỨNG VÍ & NẮM GIỮ</span><strong id="wallet-scope" class="small-value">Đang đọc…</strong><small>+ 1 pool Ethereum · xem mục Ví & DEX</small></article></div>
 <nav aria-label="Các mục"><button class="tab active" data-panel="research">01 / Lọc áp lực mua</button><button class="tab" data-panel="market">02 / Thị trường</button><button class="tab" data-panel="onchain">03 / Ví & DEX</button><button class="tab" data-panel="evidence">04 / Hồ sơ tích lũy</button><button class="tab" data-panel="method">05 / Phương pháp</button></nav>

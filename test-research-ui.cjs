@@ -116,3 +116,10 @@ test('scatter and pressure SVG contain finite coordinates and explicit native-da
   const pressure = R.pressureChart(a.series); assert.match(pressure, /^<svg/); assert.match(pressure, /không chồng lấn/); assert.match(pressure, /Taker mua 7D/); assert.match(pressure, /Taker mua 30D/); assert.ok(!/NaN|Infinity|undefined/.test(pressure));
   assert.match(R.scatter([]), /Chưa có cặp đủ dữ liệu/);
 });
+
+test('historical chart marks exactly the completed-day condition matches and labels their limits', () => {
+ const a=S.analyze(Object.values(full.histories)[0],{now:OBSERVED_NOW,windowDays:365});
+ const plot=R.pressureChart(a.series);
+ assert.equal((plot.match(/class="research-filter-mark"/g)||[]).length,a.series.filter(p=>p.candidateAtClose===true&&Number.isFinite(p.buyShare7)).length);
+ if(a.series.some(p=>p.candidateAtClose===true))assert.match(plot,/chưa xác nhận ví hoặc hiệu quả dự báo/);
+});
