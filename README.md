@@ -1,50 +1,49 @@
-# Flow Research — Public Market Observatory
+# Flow Research — Crypto Market Observatory v0.4
 
-Giao diện web quan sát dữ liệu thị trường công khai. Kho này **không chứa bộ chiến lược riêng** và không phải hệ thống giao dịch tự động.
+Public crypto market research interface at https://phuongdinh92.github.io/flow-research/ . Version 0.4 adds broad Binance + Bitget spot/USDT discovery, an auditable saved market snapshot, and source-specific daily history. It does not implement a private Quant research engine or whale accumulation detection.
 
-## Phần đã có
+## Implemented
 
-- `index.html`, `style.css`, `app.js`: giao diện tối, phù hợp máy tính và điện thoại; bảng dữ liệu, sắp xếp, bản đồ lực mua và biểu đồ chi tiết.
-- Đọc các endpoint công khai Binance Spot theo yêu cầu; không cần API key, không kết nối ví, không đặt lệnh.
-- Tính thống kê mô tả: biến động giá 7/30 ngày, tỷ trọng taker mua 7 ngày, giá trị giao dịch bình quân 20 ngày.
-- Loại nến chưa đóng, kiểm tra ngày thiếu và dữ liệu cũ; hiển thị lỗi truy cập thay vì điền dữ liệu giả.
-- Chỉ gửi yêu cầu tới nguồn khi người dùng bấm cập nhật. Không chạy nền, không lưu danh sách người dùng vào GitHub.
+- `market.js`: read-only Binance Spot + Bitget Spot public adapters. Discovers eligible active USDT instruments from source metadata instead of a fixed 25/30-symbol list.
+- Bitget V3 explicitly classifies crypto/stock products; only `category=SPOT`, `status=online`, `symbolType=crypto`, `instrumentType=crypto`, `quoteCoin=USDT` qualify. Regional `areaSymbol` is not used to infer asset type.
+- Each venue/instrument has a separate key. Shared tickers do not establish common chain/contract identity. No cross-venue asset or taker-percentage aggregation.
+- Search, venue filters, sorting, pagination, per-source coverage and errors. Every row retains the source timestamp; ticker age over 15 minutes is labelled stale.
+- On-demand daily UTC history, completed candles only. Summary statistics require 31 consecutive daily bars ending on the latest closed UTC day. Binance taker buy is descriptive; the Bitget candle field is unavailable and remains null.
+- `collect_market.py`: standard-library public snapshot collector, row validation, source failures, normalized records, endpoint/time/SHA256 provenance, atomic replacement. If all sources fail it preserves the prior snapshot. If one succeeds a partial new snapshot contains only that run's valid rows; the failed source is recorded, not relabelled as fresh.
+- Existing snapshots are optional for the UI. A failed/absent snapshot does not prevent a user-requested direct API scan. A delayed saved response cannot overwrite a newer scan.
 
-## Phần chưa có
+## Public and private boundaries
 
-Không có công thức xếp hạng riêng, bộ backtest của v0.2, nhãn ví cá mập, lịch sử nắm giữ, backend private, đăng nhập hoặc bằng chứng chiến lược có lợi nhuận. Không diễn giải thống kê taker thành danh tính nhà đầu tư.
+This repository contains public descriptive market data and implementation only. It has no private strategy model, secret scoring parameters, classified wallet list, credentials, personal portfolio, authenticated backend, or trading operations. Any files delivered to a browser can be inspected and copied.
 
-## Xuất bản bằng GitHub Pages
+This version is not A1Radar's ASI and does not confirm whale accumulation. No blockchain collectors, wallet holding histories, wallet clusters, strategy backtests, validated forecasts, or investment rankings have been implemented here. Multiple exchanges alone do not establish who bought or retained tokens.
 
-Mã đã được đưa lên nhánh `main`. Lần kiểm tra sau khi tải mã, repository vẫn báo `has_pages: false`; website chưa được bật.
+## Evidence and limits
 
-Chủ kho mở [Settings → Pages](https://github.com/Phuongdinh92/flow-research/settings/pages), chọn:
+The collector records raw response **hashes and safe response metadata**, not complete raw response bodies. Normalized exports are useful for inspection but do not by themselves provide a fully replayable market research dataset. Coverage denominators count eligible venue instruments, not unique crypto assets or a percentage of the whole market.
 
-- Source: **Deploy from a branch**.
-- Branch: **main**; thư mục **/(root)**.
-- Bấm **Save**, sau đó chờ GitHub báo xuất bản thành công và cung cấp nút **Visit site**.
+Direct access may fail because of geography, CORS, provider restrictions, rate limits, or network errors. HTTP/HTML errors do not become successful market data. Missing values remain missing; numeric zero is preserved. The source's ticker timestamp represents a generated ticker update, not necessarily the time of the last trade.
 
-`.nojekyll` cho phép phục vụ trực tiếp các tệp tĩnh. Không cần tải ZIP hay cài Python để sử dụng website sau khi Pages xuất bản.
+No scheduled collection or trading has been enabled. Nothing runs when the page is closed. No GitHub Actions workflow is included in this change.
 
-## Ranh giới công khai và riêng tư
+## Offline validation
 
-Mọi tệp trong repository public và mọi HTML/CSS/JavaScript/JSON gửi tới trình duyệt đều có thể bị xem hoặc sao chép. Public không phải một biện pháp bảo vệ sở hữu trí tuệ. Kho private cũng không làm mã đã gửi tới trình duyệt trở thành bí mật.
+Run without network access:
 
-Công thức xếp hạng, tham số chiến lược, dữ liệu nghiên cứu, nhãn ví riêng, khóa truy cập và danh mục cá nhân phải để ngoài kho này. Bộ nghiên cứu riêng cần một kho private và backend có xác thực, kiểm tra quyền phía máy chủ; backend đó **chưa được triển khai**.
+```text
+node test-market.cjs
+node test-ui.cjs
+python collect_market.py --self-test
+```
 
-`.gitignore` chỉ giảm rủi ro thêm nhầm tệp khi dùng Git thông thường, không chặn được upload thủ công hay bảo vệ tệp đã commit. Thẻ `noindex` không phải kiểm soát truy cập. Không dùng mật khẩu trong JavaScript để giả lập bảo mật.
+The 13 adapter, 10 UI, and 9 Python validation tests pass. Tests use isolated fixtures, never production fallback rows. Passing software tests does not establish market prediction performance. Live collection on 2026-10-16 returned 510/511 eligible Binance pairs (IQUSDT excluded for stale ticker data) and 504/504 Bitget pairs. The saved snapshot loads through the production UI validator. UI behavior is tested with an offline DOM harness; full browser rendering has not been verified.
 
-Không cấp thêm giấy phép nguồn mở. Việc công khai vẫn cho phép người khác xem/fork theo chức năng và điều khoản GitHub; thông báo này không thể ngăn sao chép.
+## Source specifications
 
-## Kiểm tra phiên bản này
+- [Binance market-data-only service](https://developers.binance.com/en/docs/products/spot/faqs/market_data_only)
+- [Binance REST market data](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints)
+- [Bitget V3 instruments and product types](https://www.bitget.com/docs/catalog/market/market-data)
+- [Bitget spot tickers](https://www.bitget.com/api-doc/spot/market/Get-Tickers)
+- [Bitget spot candles](https://www.bitget.com/api-doc/spot/market/Get-Candle-Data)
 
-17 kiểm tra tính toán và dữ liệu đạt; 10 kiểm tra DOM/giao diện offline đạt, bao gồm trạng thái trống, xử lý dữ liệu mô phỏng, sắp xếp, chi tiết mã, màn hình 390 px và lỗi 429. Dữ liệu mô phỏng chỉ dùng trong môi trường kiểm thử, không được đưa vào website.
-
-Kiểm tra DOM chạy trong bộ nhớ với `fetch` giả lập; không phải kiểm thử CSP, API thật hoặc website đã xuất bản. Kết nối API thật từ môi trường xây dựng thất bại ở bước phân giải DNS. Cần kiểm tra nguồn dữ liệu thực tế sau khi xuất bản. Không có kết quả backtest hay cam kết lợi nhuận.
-
-## Tài liệu nguồn
-
-- [Binance: Market Data Only URLs](https://developers.binance.com/en/docs/products/spot/faqs/market_data_only)
-- [Binance: Klines và market endpoints](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/market)
-- [GitHub: Configuring a publishing source](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
-- [GitHub: Licensing a repository](https://docs.github.com/articles/licensing-a-repository)
+Open the website directly; no Python installation or file download is required to use it. The source collector is included for maintaining auditable public snapshots.
