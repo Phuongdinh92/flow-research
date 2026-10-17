@@ -1,39 +1,95 @@
 #!/usr/bin/env node
 'use strict';
-/* Repeatable public CoinGecko collection. Never replace an observation time after a failed request. */
+/* Public CoinGecko active-catalog census. Explicit IDs, an independent BTC
+   observation in every batch, original receipt times, >=8 second start spacing,
+   and no retry after any provider/network/JSON error. */
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
 const E=require('./ecosystem.js'),M=require('./market-overview.js');
-if(!globalThis.crypto)globalThis.crypto=crypto.webcrypto;
 const CATEGORY_URL='https://api.coingecko.com/api/v3/coins/categories?order=market_cap_desc';
+const GLOBAL_URL=E.SOURCE_URLS.global,MIN_REQUEST_SPACING_MS=8000,BATCH_SIZE=249;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const sha=body=>crypto.createHash('sha256').update(body).digest('hex');
 function atomicJSON(file,value){const temporary=file+'.tmp-'+process.pid;fs.writeFileSync(temporary,JSON.stringify(value));fs.renameSync(temporary,file);}
-async function collect({repoDir=__dirname,fetchImpl=globalThis.fetch,wait=pause,now=Date.now,rawDirectory}={}){
- const dataDirectory=path.join(repoDir,'data'),marketPath=path.join(dataDirectory,'ecosystem-snapshot.json'),categoryPath=path.join(dataDirectory,'market-categories.json');
- const previous=E.validateSnapshot(JSON.parse(fs.readFileSync(marketPath,'utf8'))),previousCategories=M.validateCategories(JSON.parse(fs.readFileSync(categoryPath,'utf8')));
- const rawDir=rawDirectory||fs.mkdtempSync(path.join(os.tmpdir(),'flow-market-overview-'));fs.mkdirSync(rawDir,{recursive:true});
- const report={collector:'public-market-overview-v1',startedAt:now(),finishedAt:null,rawDirectory:rawDir,markets:{status:'preserved',generatedAt:previous.generatedAt},categories:{status:'preserved',generatedAt:previousCategories.generatedAt},requests:[],errors:[]};
- let requestIndex=0;
- async function recordedFetch(url,options){
-  const index=++requestIndex,startedAt=now(),response=await fetchImpl(url,options),body=await response.text(),meta={index,url,startedAt,fetchedAt:now(),status:response.status,sha256:crypto.createHash('sha256').update(body).digest('hex'),bytes:Buffer.byteLength(body)},stem='request-'+String(index).padStart(2,'0');
-  fs.writeFileSync(path.join(rawDir,stem+'.raw'),body);fs.writeFileSync(path.join(rawDir,stem+'.meta.json'),JSON.stringify(meta,null,2));report.requests.push(meta);
-  return {ok:response.ok,status:response.status,text:async()=>body};
- }
- try{
-  const next=await E.refresh(previous,recordedFetch,{wait,now});atomicJSON(marketPath,next);
-  report.markets={status:'updated',generatedAt:next.generatedAt,pricedCount:next.global.pricedCount,fieldCoverage:Object.fromEntries(Object.entries(M.PERIODS).map(([period,p])=>[period,next.global.pricedRows.filter(r=>Number.isFinite(r[p.field])).length]))};
- }catch(e){report.errors.push({section:'markets',message:e.message});report.categories.skipReason='Stopped after market provider error; no further request to the provider.';report.finishedAt=now();fs.writeFileSync(path.join(rawDir,'collection-report.json'),JSON.stringify(report,null,2));return report;}
- await wait(8000);
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
- try{
-  const response=await recordedFetch(CATEGORY_URL,{method:'GET',credentials:'omit',cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}});
-  if(!response.ok)throw Error('CoinGecko categories HTTP '+response.status+'; prior observation preserved, no retry.');
-  const raw=JSON.parse(await response.text()),at=now(),parsed=M.parseCategories(raw,{fetchedAt:at,now:at});
-  if(!parsed.rows.length)throw Error('No complete category records; prior observation preserved.');
-  const metadata=report.requests.at(-1),next=M.validateCategories({schemaVersion:1,provider:'CoinGecko',currency:'USD',generatedAt:at,source:{url:CATEGORY_URL,sha256:metadata.sha256,inputCount:parsed.inputCount,fetchedAt:at},rows:parsed.rows,errors:parsed.errors,meaning:'Overlapping provider categories; market-cap change is not net buying. Representative coin IDs are not full category membership.'});
-  atomicJSON(categoryPath,next);report.categories={status:'updated',generatedAt:at,inputCount:parsed.inputCount,validCount:parsed.rows.length,excludedCount:parsed.errors.length};
- }catch(e){report.errors.push({section:'categories',message:e.name==='AbortError'?'Category request timed out; prior observation preserved.':e.message});}
- finally{clearTimeout(timer);}
- report.finishedAt=now();fs.writeFileSync(path.join(rawDir,'collection-report.json'),JSON.stringify(report,null,2));return report;
+function batchUrl(ids){const requested=[...ids];if(!requested.includes('bitcoin'))requested.push('bitcoin');return 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids='+encodeURIComponent(requested.join(','))+'&order=id_asc&per_page=250&page=1&sparkline=false&price_change_percentage=1h%2C24h%2C7d%2C30d%2C1y';}
+function metadata(r){return {sourceUrl:r.url,startedAt:r.startedAt,fetchedAt:r.fetchedAt,sha256:r.sha256};}
+function classifyBatch(raw,owned,receipt,index){
+ if(!Array.isArray(raw))throw Error('Markets response is not an array; stopped without replacing the published pair.');
+ const requested=[...owned];if(!requested.includes('bitcoin'))requested.push('bitcoin');const allowed=new Set(requested),grouped=new Map();
+ for(const row of raw){if(!row||typeof row.id!=='string'||!allowed.has(row.id))throw Error('Markets response contains an unrequested/malformed identity; stopped without replacing the published pair.');const list=grouped.get(row.id)||[];list.push(row);grouped.set(row.id,list);}
+ const batchId='coingecko_market_batch_'+String(index).padStart(4,'0'),rows=[],states=[];
+ function normalized(id){const inputs=grouped.get(id);if(!inputs)return {status:'missing',reason:'Requested active catalog ID was absent from the response.'};if(inputs.length!==1)return {status:'invalid',reason:'Provider returned this ID more than once in the explicit batch.'};const r=inputs[0];if(r.current_price===null||r.current_price===undefined||r.current_price===0)return {status:'no_quote',reason:'Provider returned no positive current USD quote.'};const parsed=E.parseMarkets(inputs,{page:index,fetchedAt:receipt.fetchedAt,now:receipt.fetchedAt});if(parsed.rows.length!==1)return {status:'invalid',reason:parsed.errors.map(e=>e.message).join('; ')||'Malformed market record.'};return {status:'priced',row:{...parsed.rows[0],sourceBatch:batchId,sourceSha256:receipt.sha256}};}
+ for(const id of owned){const result=normalized(id),row=result.row;if(row)rows.push(row);states.push({id,status:result.status,reason:result.reason||null,batchId,fetchedAt:receipt.fetchedAt,sourceSha256:receipt.sha256,rowBinding:row?E.rowBinding(row):null});}
+ const btc=normalized('bitcoin');return {batch:{batchId,ownedIds:owned,requestedIds:requested,...metadata(receipt),inputCount:raw.length},rows,states,benchmark:btc.status==='priced'?btc.row:null};
 }
-module.exports={collect,CATEGORY_URL};
-if(require.main===module)collect().then(report=>{console.log(JSON.stringify(report,null,2));if(report.errors.length)process.exitCode=1;}).catch(error=>{console.error('Market overview collection failed: '+error.message);process.exitCode=1;});
+function acquireLock(lockPath,{resume=false}={}){
+ try{const fd=fs.openSync(lockPath,'wx');fs.writeFileSync(fd,JSON.stringify({pid:process.pid,createdAt:Date.now()}));fs.closeSync(fd);return;}
+ catch(e){if(e.code!=='EEXIST')throw e;if(resume){let old;try{old=JSON.parse(fs.readFileSync(lockPath,'utf8'));}catch(_){}if(old&&Number.isInteger(old.pid)&&old.pid>0){let alive=true;try{process.kill(old.pid,0);}catch(err){if(err.code==='ESRCH')alive=false;}if(!alive){fs.unlinkSync(lockPath);return acquireLock(lockPath);}}}throw Error('A catalog collection lock exists; no second provider scan was started.');}
+}
+async function collect({repoDir=__dirname,fetchImpl=globalThis.fetch,wait=pause,now=Date.now,rawDirectory,resume=false}={}){
+ const dataDirectory=path.join(repoDir,'data'),marketPath=path.join(dataDirectory,'ecosystem-snapshot.json'),categoryPath=path.join(dataDirectory,'market-categories.json'),coveragePath=path.join(dataDirectory,'market-coverage.json'),attemptPath=path.join(dataDirectory,'market-collection-attempt.json');
+ const previous=E.validateSnapshot(JSON.parse(fs.readFileSync(marketPath,'utf8'))),previousCategories=M.validateCategories(JSON.parse(fs.readFileSync(categoryPath,'utf8')));
+ const rawDir=rawDirectory||fs.mkdtempSync(path.join(os.tmpdir(),'flow-market-overview-'));fs.mkdirSync(rawDir,{recursive:true});const checkpointPath=path.join(rawDir,'checkpoint.json'),lockPath=path.join(rawDir,'.collection.lock');acquireLock(lockPath,{resume});
+ let checkpoint={schemaVersion:1,collector:'coingecko-active-catalog-v2',startedAt:now(),requests:[],halted:false},lastStartedAt=null,currentBatch=null;
+ const report={collector:'public-market-overview-v2',startedAt:now(),finishedAt:null,rawDirectory:rawDir,markets:{status:'preserved',generatedAt:previous.generatedAt},categories:{status:'preserved',generatedAt:previousCategories.generatedAt},requests:[],errors:[]};
+ let catalog=null,catalogBeforeSource=null,attemptGenerationId=null,entries=[],states=new Map(),marketRows=[],batches=[],benchmarksByBatch={};
+ function attemptDetails(){return {scope:'active_catalog_frozen_at_start',generationId:attemptGenerationId,catalogBefore:catalogBeforeSource,entries:entries.map(({rowBinding,activeAfter,...e})=>e),requests:report.requests.map(r=>({key:r.key,...metadata(r),status:r.status,bytes:r.bytes}))};}
+ try{
+  if(fs.existsSync(checkpointPath)){if(!resume)throw Error('Raw directory already contains a checkpoint; use --resume for a source-preserving continuation.');checkpoint=JSON.parse(fs.readFileSync(checkpointPath,'utf8'));if(checkpoint.schemaVersion!==1||checkpoint.collector!=='coingecko-active-catalog-v2')throw Error('Unsupported catalog checkpoint.');if(checkpoint.halted)throw Error('This attempt halted at a provider error. It will not retry or resume provider requests.');report.startedAt=checkpoint.startedAt;}
+  async function get(key,url){
+   const cached=checkpoint.requests.find(r=>r.key===key);
+   if(cached){if(cached.url!==url||cached.status!==200)throw Error('Cached request does not match the frozen request.');const body=fs.readFileSync(path.join(rawDir,cached.rawFile),'utf8');if(sha(body)!==cached.sha256)throw Error('Cached source SHA256 mismatch.');report.requests.push(cached);lastStartedAt=cached.startedAt;return {receipt:cached,raw:JSON.parse(body),cached:true};}
+   if(lastStartedAt!==null){const remaining=MIN_REQUEST_SPACING_MS-(now()-lastStartedAt);if(remaining>0)await wait(remaining);}
+   const startedAt=now();lastStartedAt=startedAt;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);let response,body;
+   try{response=await fetchImpl(url,{method:'GET',credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal,headers:{Accept:'application/json'}});body=await response.text();}
+   catch(e){checkpoint.halted=true;checkpoint.failure={key,url,startedAt,fetchedAt:now(),message:e.message};atomicJSON(checkpointPath,checkpoint);throw Error('CoinGecko network/request error; stopped with no retry: '+e.message);}
+   finally{clearTimeout(timer);}
+   const index=checkpoint.requests.length+1,receipt={index,key,url,startedAt,fetchedAt:now(),status:response.status,sha256:sha(body),bytes:Buffer.byteLength(body),contentType:response.headers?.get?.('content-type')||null,rawFile:'request-'+String(index).padStart(3,'0')+'.raw'};
+   fs.writeFileSync(path.join(rawDir,receipt.rawFile),body);fs.writeFileSync(path.join(rawDir,receipt.rawFile+'.meta.json'),JSON.stringify(receipt,null,2));checkpoint.requests.push(receipt);report.requests.push(receipt);
+   if(!response.ok){checkpoint.halted=true;checkpoint.failure={...receipt,message:'HTTP '+response.status};atomicJSON(checkpointPath,checkpoint);const error=Error('CoinGecko HTTP '+response.status+'; stopped at the first provider error, no retry.');error.sourceReceipt=receipt;throw error;}
+   let raw;try{raw=JSON.parse(body);}catch(e){checkpoint.halted=true;checkpoint.failure={...receipt,message:'Invalid JSON'};atomicJSON(checkpointPath,checkpoint);throw Error('CoinGecko returned invalid JSON; stopped with no retry.');}atomicJSON(checkpointPath,checkpoint);return {receipt,raw,cached:false};
+  }
+  const before=await get('catalog-before',E.SOURCE_URLS.catalog);catalog=E.parseCatalog(before.raw);if(!catalog.catalogCount)throw Error('Empty active catalog; previous data retained.');
+  entries=catalog.entries.map(e=>({...e,status:'unattempted',reason:'ID has not been requested in this attempt.',batchId:null,fetchedAt:null,sourceSha256:null,rowBinding:null,activeAfter:true}));states=new Map(entries.map(e=>[e.id,e]));
+  const generationId=sha('active-catalog-v2\n'+before.receipt.sha256+'\n'+before.receipt.startedAt),chunks=[];attemptGenerationId=generationId;catalogBeforeSource={...metadata(before.receipt),count:catalog.catalogCount};for(let i=0;i<entries.length;i+=BATCH_SIZE)chunks.push(entries.slice(i,i+BATCH_SIZE).map(e=>e.id));
+  for(let i=0;i<chunks.length;i++){
+   currentBatch={index:i+1,ids:chunks[i],url:batchUrl(chunks[i])};const observed=await get('market-batch-'+String(i+1).padStart(4,'0'),currentBatch.url),parsed=classifyBatch(observed.raw,chunks[i],observed.receipt,i+1);
+   for(const state of parsed.states)Object.assign(states.get(state.id),state);marketRows.push(...parsed.rows);batches.push(parsed.batch);benchmarksByBatch[parsed.batch.batchId]=parsed.benchmark;currentBatch=null;
+   atomicJSON(attemptPath,{schemaVersion:1,provider:'CoinGecko',state:'collecting',generationId,startedAt:checkpoint.startedAt,observedAt:now(),counts:E.coverageCounts(entries),completedBatches:batches.length,expectedBatches:chunks.length,...attemptDetails(),meaning:'A collection attempt; published snapshot/coverage pair remains unchanged until validation succeeds.'});
+   console.log(JSON.stringify({stage:'catalog-batch',batch:i+1,total:chunks.length,requested:chunks[i].length,priced:parsed.rows.length,originalFetchedAt:observed.receipt.fetchedAt,cached:observed.cached}));
+  }
+  const global=await get('global',GLOBAL_URL),aggregate=E.parseGlobal(global.raw),after=await get('catalog-after',E.SOURCE_URLS.catalog),afterCatalog=E.parseCatalog(after.raw),beforeIDs=new Set(entries.map(e=>e.id)),afterIDs=new Set(afterCatalog.entries.map(e=>e.id));
+  const addedIds=[...afterIDs].filter(id=>!beforeIDs.has(id)).sort(),removedIds=[...beforeIDs].filter(id=>!afterIDs.has(id)).sort();for(const e of entries)e.activeAfter=afterIDs.has(e.id);
+  const finishedAt=after.receipt.fetchedAt,collection={startedAt:checkpoint.startedAt,finishedAt,complete:addedIds.length===0,frozenCatalogComplete:true,activeAfterCovered:addedIds.length===0};
+  const ledger=E.validateCoverageLedger({schemaVersion:1,provider:'CoinGecko',currency:'USD',scope:'active_catalog_frozen_at_start',generationId,collection,catalogBefore:{...metadata(before.receipt),count:catalog.catalogCount},catalogAfter:{...metadata(after.receipt),count:afterCatalog.catalogCount},churn:{addedIds,removedIds},counts:E.coverageCounts(entries),entries,batches,benchmarksByBatch,meaning:'Every ID in the active source catalog frozen at the first receipt was explicitly requested once. Repeated Bitcoin anchors are not additional catalog rows. Sequential capture is not atomic; catalog additions after the freeze are reported separately, not claimed priced. This is not all tokens on every chain, inactive assets, venue coverage, or wallet analysis.'});
+  const coverageBytes=Buffer.from(JSON.stringify(ledger)),coverageSha256=sha(coverageBytes),provenance=previous.provenance.filter(p=>!p.id.startsWith('coingecko_'));
+  provenance.push({id:'coingecko_catalog_before',...metadata(before.receipt),recordCount:catalog.catalogCount,meaning:'Full active provider catalog frozen before the explicit-ID market requests.'},...batches.map(b=>({id:b.batchId,sourceUrl:b.sourceUrl,startedAt:b.startedAt,fetchedAt:b.fetchedAt,sha256:b.sha256,recordCount:b.inputCount,meaning:'Explicit owned catalog IDs plus one exact Bitcoin ID anchor; original provider row timestamps are preserved.'})),{id:'coingecko_global',...metadata(global.receipt),recordCount:1,meaning:'Provider global aggregates have a distinct, independently observed scope.'},{id:'coingecko_catalog_after',...metadata(after.receipt),recordCount:afterCatalog.catalogCount,meaning:'Active catalog after the scan, used to expose membership changes during collection.'});
+  const next=E.validateSnapshot({...previous,generatedAt:finishedAt,global:{...previous.global,...aggregate,rankScope:'active_catalog',catalogCount:catalog.catalogCount,contractMappingCount:catalog.contractMappingCount,incompleteMetadataCount:catalog.incompleteMetadataCount,pricedCount:marketRows.length,pricedRows:marketRows.sort((a,b)=>(a.rank??Infinity)-(b.rank??Infinity)||a.id.localeCompare(b.id)),duplicatePageRowCount:0,excludedMarketRowCount:entries.length-marketRows.length,requestPages:batches.map(b=>({page:Number(b.batchId.slice(-4)),batchId:b.batchId,status:'ok',inputCount:b.inputCount,pricedCount:entries.filter(e=>e.batchId===b.batchId&&e.status==='priced').length,fetchedAt:b.fetchedAt})),catalogCoverage:{generationId,coverageSha256,scope:ledger.scope,complete:collection.complete},collection},provenance,refreshedSections:['global.activeCatalog','global.pricedRows','global.aggregates'],preservedSections:['stablecoinHistory','chains']});
+  E.validateMarketCoveragePair(next,ledger,{coverageSha256});
+  // Both temporary files are fully written before either rename. Readers reject a
+  // transient cross-generation pair, retain their prior pair, and can reread it.
+  fs.writeFileSync(coveragePath+'.next',coverageBytes);fs.writeFileSync(marketPath+'.next',JSON.stringify(next));fs.renameSync(coveragePath+'.next',coveragePath);fs.renameSync(marketPath+'.next',marketPath);
+  report.markets={status:'updated',generatedAt:next.generatedAt,generationId,coverageSha256,counts:ledger.counts,collection,churn:ledger.churn,fieldCoverage:Object.fromEntries(Object.entries(M.PERIODS).map(([period,p])=>[period,next.global.pricedRows.filter(r=>Number.isFinite(r[p.field])).length]))};
+  atomicJSON(attemptPath,{schemaVersion:1,provider:'CoinGecko',state:collection.complete?'complete':'frozen_catalog_complete_with_churn',generationId,startedAt:checkpoint.startedAt,observedAt:finishedAt,counts:ledger.counts,churn:ledger.churn,collection,coverageSha256,completedBatches:batches.length,...attemptDetails()});
+  try{
+   const observed=await get('categories',CATEGORY_URL),parsed=M.parseCategories(observed.raw,{fetchedAt:observed.receipt.fetchedAt,now:observed.receipt.fetchedAt});if(!parsed.rows.length)throw Error('No complete category records; prior category observation retained.');
+   const nextCategories=M.validateCategories({schemaVersion:1,provider:'CoinGecko',currency:'USD',generatedAt:observed.receipt.fetchedAt,source:{url:CATEGORY_URL,sha256:observed.receipt.sha256,inputCount:parsed.inputCount,fetchedAt:observed.receipt.fetchedAt},rows:parsed.rows,errors:parsed.errors,meaning:'Overlapping provider categories; market-cap change is not net buying. Representative coin IDs are not full category membership.'});atomicJSON(categoryPath,nextCategories);report.categories={status:'updated',generatedAt:nextCategories.generatedAt,inputCount:parsed.inputCount,validCount:parsed.rows.length,excludedCount:parsed.errors.length};
+  }catch(e){report.errors.push({section:'categories',message:e.message});}
+ }catch(e){
+  if(currentBatch&&entries.length){const receipt=e.sourceReceipt;for(const id of currentBatch.ids)Object.assign(states.get(id),{status:'error',reason:e.message,batchId:'coingecko_market_batch_'+String(currentBatch.index).padStart(4,'0'),fetchedAt:receipt?.fetchedAt??null,sourceSha256:receipt?.sha256??null,rowBinding:null});}
+  report.errors.push({section:'markets',message:e.message});report.categories.skipReason='Stopped after market provider/validation error; no further provider request.';
+  if (entries.length || !resume) atomicJSON(attemptPath,{schemaVersion:1,provider:'CoinGecko',state:'failed',startedAt:checkpoint.startedAt,observedAt:now(),counts:entries.length?E.coverageCounts(entries):null,completedBatches:batches.length,halted:checkpoint.halted,message:e.message,previousPublishedPairRetained:true,...attemptDetails()});
+ }finally{report.finishedAt=now();atomicJSON(path.join(rawDir,'collection-report.json'),report);if(fs.existsSync(lockPath))fs.unlinkSync(lockPath);}
+ return report;
+}
+function replayFailedAttempt({repoDir=__dirname,rawDirectory}={}){
+ const checkpoint=JSON.parse(fs.readFileSync(path.join(rawDirectory,'checkpoint.json'),'utf8'));if(!checkpoint.halted)throw Error('Expected a halted checkpoint; offline replay does not call the provider.');
+ const requests=checkpoint.requests.map(r=>{const body=fs.readFileSync(path.join(rawDirectory,r.rawFile),'utf8');if(sha(body)!==r.sha256)throw Error('Raw SHA256 mismatch');return {...r,raw:r.status===200?JSON.parse(body):null};});
+ const before=requests.find(r=>r.key==='catalog-before'&&r.status===200);if(!before)throw Error('No successful catalog freeze to replay.');const catalog=E.parseCatalog(before.raw),entries=catalog.entries.map(e=>({...e,status:'unattempted',reason:'ID has not been requested in this attempt.',batchId:null,fetchedAt:null,sourceSha256:null})),byId=new Map(entries.map(e=>[e.id,e]));let completedBatches=0;
+ for(const r of requests.filter(r=>/^market-batch-\d{4}$/.test(r.key))){const index=Number(r.key.slice(-4)),owned=entries.slice((index-1)*BATCH_SIZE,index*BATCH_SIZE).map(e=>e.id);if(r.url!==batchUrl(owned))throw Error('Frozen request identity differs');if(r.status===200){const parsed=classifyBatch(r.raw,owned,r,index);for(const {rowBinding,...e}of parsed.states)Object.assign(byId.get(e.id),e);completedBatches++;}else for(const id of owned)Object.assign(byId.get(id),{status:'error',reason:'CoinGecko HTTP '+r.status+'; stopped at the first provider error, no retry.',batchId:'coingecko_market_batch_'+String(index).padStart(4,'0'),fetchedAt:r.fetchedAt,sourceSha256:r.sha256});}
+ const failed=requests.find(r=>r.status!==200),observedAt=failed?.fetchedAt??checkpoint.failure?.fetchedAt;if(!observedAt)throw Error('Missing halted request time');
+ const attempt=E.validateCollectionAttempt({schemaVersion:1,provider:'CoinGecko',scope:'active_catalog_frozen_at_start',state:'failed',generationId:sha('active-catalog-v2\n'+before.sha256+'\n'+before.startedAt),startedAt:checkpoint.startedAt,observedAt,counts:E.coverageCounts(entries),completedBatches,halted:true,message:failed?'CoinGecko HTTP '+failed.status+'; stopped at the first provider error, no retry.':checkpoint.failure.message,previousPublishedPairRetained:true,catalogBefore:{...metadata(before),count:catalog.catalogCount},entries,requests:requests.map(r=>({key:r.key,...metadata(r),status:r.status,bytes:r.bytes}))});
+ atomicJSON(path.join(repoDir,'data/market-collection-attempt.json'),attempt);return attempt;
+}
+
+module.exports={collect,CATEGORY_URL,GLOBAL_URL,MIN_REQUEST_SPACING_MS,BATCH_SIZE,batchUrl,classifyBatch,atomicJSON,replayFailedAttempt};
+if(require.main===module){const args=process.argv.slice(2);let rawDirectory,resume=false;for(let i=0;i<args.length;i++){if(args[i]==='--raw-dir')rawDirectory=args[++i];else if(args[i]==='--resume')resume=true;else throw Error('Unknown option '+args[i]);}collect({rawDirectory,resume}).then(report=>{console.log(JSON.stringify(report,null,2));if(report.errors.length)process.exitCode=1;}).catch(error=>{console.error('Market overview collection failed: '+error.message);process.exitCode=1;});}

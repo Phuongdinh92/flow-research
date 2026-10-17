@@ -96,6 +96,30 @@
         "$ref": "#/$defs/fundingHistory"
       }
     },
+    "fundingSelection": {
+      "type": "object",
+      "description": "A maximum 90-day closed-hour window. Optional baseline freezes exact native identifiers and order from a validated previous capture; current volume ranking is not reapplied.",
+      "required": ["policy", "requestedMarkets", "requestedDays", "startTime", "endTime", "selectedNativeKeys", "historicalMembership"],
+      "properties": {
+        "policy": { "type": "string", "minLength": 1 },
+        "requestedMarkets": { "type": "integer", "minimum": 0, "maximum": 200 },
+        "requestedDays": { "type": "integer", "minimum": 1, "maximum": 90 },
+        "startTime": { "type": "integer", "minimum": 1500000000000, "maximum": 4500000000000 },
+        "endTime": { "type": "integer", "minimum": 1500000000000, "maximum": 4500000000000 },
+        "selectedNativeKeys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^hyperliquid:perp:main:.+$" } },
+        "historicalMembership": { "const": false },
+        "baseline": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "object", "required": ["sha256", "asOf", "selectedNativeKeys"], "properties": {
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "asOf": { "type": "integer", "minimum": 1500000000000, "maximum": 4500000000000 },
+              "selectedNativeKeys": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^hyperliquid:perp:main:.+$" } }
+            } }
+          ]
+        }
+      }
+    },
     "coverage": {
       "type": "object",
       "required": [

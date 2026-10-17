@@ -140,6 +140,18 @@
     const c = object(s.coverage, 'Coverage');
     if (c.metadataEntries !== s.assets.length || c.activeMarkets !== s.assets.filter(a => !a.isDelisted).length || c.delistedMarkets !== s.assets.filter(a => a.isDelisted).length || c.fundingCaptured !== Object.keys(s.fundingHistories).length) fail('coverage', 'Bộ đếm coverage không khớp dữ liệu');
     if (!Number.isInteger(c.fundingRequested) || c.fundingRequested < c.fundingCaptured || !Array.isArray(s.errors) || s.collectionState !== (s.errors.length ? 'partial' : 'complete')) fail('collection_state', 'Trạng thái thu thập sai');
+    if (c.fundingRecords !== undefined && c.fundingRecords !== Object.values(s.fundingHistories).reduce((n,h) => n + h.rows.length,0)) fail('funding_coverage', 'Số giờ funding không khớp dữ liệu');
+    if (c.fundingCompleteWindows !== undefined && c.fundingCompleteWindows !== Object.values(s.fundingHistories).filter(h => h.coverage.complete).length) fail('funding_coverage', 'Số cửa sổ funding đủ không khớp dữ liệu');
+    if (s.fundingSelection !== undefined) {
+      const selection = object(s.fundingSelection, 'Funding selection'), keys = selection.selectedNativeKeys;
+      if (!Array.isArray(keys) || new Set(keys).size !== keys.length || JSON.stringify(keys) !== JSON.stringify(Object.keys(s.fundingHistories)) || selection.requestedMarkets !== keys.length || c.fundingRequested !== keys.length || selection.historicalMembership !== false) fail('funding_selection', 'Phạm vi funding không khớp định danh native đã lưu');
+      if (!Number.isInteger(selection.requestedDays) || selection.requestedDays < 1 || selection.requestedDays > 90 || selection.endTime + 1 - selection.startTime !== selection.requestedDays * DAY || selection.endTime !== Math.floor(s.asOf / HOUR) * HOUR - 1 || Object.values(s.fundingHistories).some(h => h.startTime !== selection.startTime || h.endTime !== selection.endTime)) fail('funding_window', 'Cửa sổ funding phải khớp đúng số ngày và giờ UTC đã đóng');
+      if (selection.baseline !== undefined && selection.baseline !== null) {
+        const baseline = object(selection.baseline, 'Funding selection baseline');
+        stamp(baseline.asOf, 'Selection baseline asOf');
+        if (!/^[a-f0-9]{64}$/.test(baseline.sha256 || '') || baseline.asOf > s.asOf || JSON.stringify(baseline.selectedNativeKeys) !== JSON.stringify(keys)) fail('funding_baseline', 'Chứng cứ tập native cố định không hợp lệ');
+      }
+    }
     if (!s.capabilities || s.capabilities.liquidationHeatmap !== false || s.capabilities.whaleAttribution !== false || s.capabilities.openInterestHistory !== false) fail('capabilities', 'Không được quảng bá tính năng thiếu dữ liệu');
     return { valid: true, ageMs: Math.max(0, now - s.asOf), stale: now - s.asOf > FRESH_MS, assets: s.assets.length, active: c.activeMarkets, fundingHistories: c.fundingCaptured };
   }

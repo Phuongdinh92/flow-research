@@ -9,7 +9,7 @@ const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const json=name=>JSON.parse(fs.readFileSync(path.join(ROOT,name),'utf8'));
 const jobs=[
  {id:'venue-prices',script:'collect_public.cjs',files:['data/market-snapshot.json'],timeout:180000,validate(){require('./market-ui.js').validateSnapshot(json(this.files[0]));}},
- {id:'global-markets',script:'collect_market_overview.cjs',files:['data/ecosystem-snapshot.json','data/market-categories.json'],timeout:180000,validate(){require('./ecosystem.js').validateSnapshot(json(this.files[0]));require('./market-overview.js').validateCategories(json(this.files[1]));}},
+ {id:'global-markets',script:'collect_market_overview.cjs',files:['data/ecosystem-snapshot.json','data/market-categories.json','data/market-coverage.json'],timeout:2400000,validate(){const E=require('./ecosystem.js'),ledgerBytes=fs.readFileSync(path.join(ROOT,this.files[2]));E.validateMarketCoveragePair(json(this.files[0]),JSON.parse(ledgerBytes),{coverageSha256:sha(ledgerBytes)});require('./market-overview.js').validateCategories(json(this.files[1]));}},
  {id:'daily-research',script:'collect_signals.cjs',files:['data/research-snapshot.json.gz','data/research-manifest.json','data/research-snapshot.json'],timeout:900000,validate(){
    const m=json('data/research-manifest.json'),b=fs.readFileSync(path.join(ROOT,'data/research-snapshot.json.gz')),decoded=zlib.gunzipSync(b);
    if(m.collectionState!=='complete'||m.sourceCoverage.errors!==0||m.sourceCoverage.completed!==m.sourceCoverage.eligible||sha(b)!==m.snapshot.sha256||sha(decoded)!==m.snapshot.decodedSha256)throw Error('Research collection incomplete or hash mismatch; previous generation retained');
@@ -23,7 +23,7 @@ const jobs=[
  {id:'hedera-holders',script:'collect_holder_history.cjs',files:['data/holder-history-snapshot.json'],timeout:1800000,validate(){require('./holder-history.js').validateSnapshot(json(this.files[0]));}},
  {id:'ton-holders',script:'collect_holders.cjs',files:['data/holders-snapshot.json'],timeout:180000,validate(){require('./holders.js').validateSnapshot(json(this.files[0]));}},
  {id:'dex-acquisition',script:'collect_chain_ledger.cjs',files:['data/chain-ledger-snapshot.json'],timeout:900000,validate(){require('./chain-ledger.js').validateSnapshot(json(this.files[0]));}},
- {id:'derivatives',script:'collect_derivatives.cjs',files:['data/derivatives-snapshot.json'],timeout:480000,validate(){require('./derivatives-core.js').validateSnapshot(json(this.files[0]));}}
+ {id:'derivatives',script:'collect_derivatives.cjs',files:['data/derivatives-snapshot.json'],timeout:900000,validate(){require('./derivatives-core.js').validateSnapshot(json(this.files[0]));}}
 ];
 function backup(files,root=ROOT){return new Map(files.map(f=>{const p=path.join(root,f);return [f,fs.existsSync(p)?fs.readFileSync(p):null];}));}
 function restore(saved,root=ROOT){for(const [f,b] of saved){const p=path.join(root,f);if(b===null){if(fs.existsSync(p))fs.unlinkSync(p);}else{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p+'.restore',b);fs.renameSync(p+'.restore',p);}}}

@@ -78,7 +78,35 @@ test('failed funding collection preserves previous published snapshot exactly',a
 });
 test('reject invalid CLI scopes and accept explicit small collection',()=>{
   assert.deepEqual(C.argumentsFrom(['--history-markets','0','--history-days','7']),{historyMarkets:0,historyDays:7});
-  for(const args of [['--history-markets','201'],['--history-days','31'],['--history-days','-1'],['--anything','1']])assert.throws(()=>C.argumentsFrom(args));
+  assert.deepEqual(C.argumentsFrom([]),{historyMarkets:32,historyDays:90});
+  assert.deepEqual(C.argumentsFrom(['--history-days','90','--selection-from','prior.json']),{historyMarkets:32,historyDays:90,selectionFrom:'prior.json'});
+  for(const args of [['--history-markets','201'],['--history-days','91'],['--history-days','-1'],['--anything','1'],['--selection-from']])assert.throws(()=>C.argumentsFrom(args));
+});
+test('90-day pagination retains five source pages and exact hourly membership',async()=>{
+  const start=Date.UTC(2026,6,19),end=start+90*D.DAY-1,all=rawFunding('BTC',2160,start),calls=[];
+  const request=async body=>{calls.push(body);const value=all.filter(r=>r.time>=body.startTime&&r.time<=body.endTime).slice(0,500);return{value,receipt:receipt(body)};};
+  const h=await C.collectFunding(request,{nativeName:'BTC',nativeIndex:0},start,end);
+  assert.equal(h.rows.length,2160);assert.equal(h.coverage.complete,true);assert.equal(h.receipts.length,5);assert.equal(calls.length,5);
+  assert.equal(D.aggregateFunding(h,'month').filter(p=>p.complete).length,2);
+});
+test('frozen selection preserves native membership and order despite changed volume ranks',()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'flow-deriv-selection-')),file=path.join(dir,'baseline.json'),s=snapshot();
+  s.fundingSelection={requestedMarkets:1,requestedDays:1,startTime:BEGIN,endTime:END,selectedNativeKeys:[D.nativeKey('BTC')],historicalMembership:false};
+  fs.writeFileSync(file,JSON.stringify(s));
+  try {
+    const n=D.normalizeContext([{universe:[rawMeta('BTC'),rawMeta('ETH')],collateralToken:0},[{...rawCtx(),dayNtlVlm:'1'},{...rawCtx(),dayNtlVlm:'999999'}]]);
+    assert.equal(C.selectMarkets(n,1).selected[0].nativeName,'ETH');
+    const frozen=C.selectMarkets(n,1,file);assert.equal(frozen.selected[0].nativeName,'BTC');assert.match(frozen.baseline.sha256,/^[a-f0-9]{64}$/);
+    assert.throws(()=>C.selectMarkets(n,2,file),/market count/);
+    n.assets[0].isDelisted=true;assert.throws(()=>C.selectMarkets(n,1,file),/absent or delisted/);
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+test('selection windows and retained funding counters reject incorrect completeness claims',()=>{
+  const s=snapshot();s.fundingSelection={requestedMarkets:1,requestedDays:1,startTime:BEGIN,endTime:END,selectedNativeKeys:[D.nativeKey('BTC')],historicalMembership:false};
+  s.coverage.fundingRecords=24;s.coverage.fundingCompleteWindows=1;assert.equal(fresh(s).valid,true);
+  for(const mutate of [v=>v.coverage.fundingRecords++,v=>v.coverage.fundingCompleteWindows=0,v=>v.fundingSelection.requestedDays=90,v=>v.fundingSelection.selectedNativeKeys.push(D.nativeKey('BTC')),v=>v.fundingSelection.historicalMembership=true]){
+    const v=structuredClone(s);mutate(v);assert.throws(()=>fresh(v));
+  }
 });
 const real=path.join(__dirname,'data','derivatives-snapshot.json');
 if(fs.existsSync(real))test('published capture source fields and every retained funding record replay through validator',()=>{const s=JSON.parse(fs.readFileSync(real,'utf8'));const r=D.validateSnapshot(s);assert.equal(r.assets,s.metadata.universe.length);assert.ok(s.assets.length>100);for(const h of Object.values(s.fundingHistories))assert.ok(h.rows.length>0);});

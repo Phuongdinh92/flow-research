@@ -1,4 +1,4 @@
-# Flow Research — Market Observatory v0.9
+# Flow Research — Market Observatory v0.9.3
 
 Public site: https://phuongdinh92.github.io/flow-research/
 
@@ -18,18 +18,18 @@ The default token terminal covers the 511-pair Binance spot/USDT research archiv
 
 ## Source scopes
 
-The following describes the v0.9 release observations. Published JSON manifests and source timestamps determine the current generation after refreshes; counts from different rows must not be added together.
+The following describes the v0.9.3 release observations. Published JSON manifests and source timestamps determine the current generation after refreshes; counts from different rows must not be added together.
 
 | Dataset | Release coverage | Interpretation and limits |
 | --- | --- | --- |
 | Binance daily archive | 511/511 current source instruments; completed UTC daily candles, requesting up to 401 days each | Current-listed universe, not historical membership or all exchanges. The default class filter removes 73 explicitly documented securities/stablecoin/fiat instruments; remaining instruments are not all independently classified. |
 | Venue spot/USDT prices | Binance, Bitget, Gate and WhiteBIT; valid/expected instrument counts shown separately | Each row is a venue/instrument identity, not a unique coin. Missing or stale tickers remain explicit. |
-| Aggregated USD markets | 1,000 distinct CoinGecko IDs across four market-cap pages; catalog observation contains 22,307 IDs | Prices and available provider return fields. Catalog membership does not establish current price, chain coverage or wallet evidence. |
+| Aggregated USD markets | Published prices retain 1,000 distinct CoinGecko IDs across four earlier market-cap pages. New full-catalog attempt froze 22,318 IDs: 1,245 attempted = 891 priced + 105 without positive quote + 249 HTTP-error IDs; 21,073 unattempted | The new scan stopped at its first HTTP 429 on batch 5. Old displayed prices and the new incomplete attempt are separate generations. Catalog membership does not establish current price, chain coverage or wallet evidence. |
 | Provider categories | 382 complete category observations from 774 returned records | 392 records lacked required change/timestamp data and were excluded. Categories overlap; representative coin IDs are not complete membership lists. Category market-cap change is not net buying. |
 | Native HBAR history | 30 requested daily observations plus 30D/90D anchors: 32 actual source snapshots | Fully paginated accounts at or above 1 million HBAR, then locally balance-ranked. Mirror Node states have 15-minute source granularity; exact state timestamps are retained. This is not the full holder population. |
 | TON holders | Top 1,000 accounts each for STON, NOT and DOGS across actual captures | Latest indexed custody balances, not one shared atomic block, beneficial owners or inferred daily history. |
 | Ethereum acquisition sample | 30 receipt-checked selected acquisitions across UNI/LINK/AAVE; four recipient contracts and seven address/token positions with 30 historical balance checkpoints | Largest estimated-USD acquisitions in each provider latest-trades sample. Size-biased and incomplete; no complete intervening Transfer ledger or verified whale identity. Checkpoints are spaced by 7,200 blocks and use actual timestamps, not exact daily trade totals. |
-| Hyperliquid perpetuals | 234 native metadata entries, 178 active; 32 contracts with 30-day funding histories | Original DEX only, including delisted metadata entries. Excludes HIP-3 DEXs, other venues and trader identities. Open interest is not net new money or a directional position count. |
+| Hyperliquid perpetuals | 234 native metadata entries, 178 active; 32 contracts requested over 90 days: 31 have 2,160 hours each, PONS has 1,124; 68,084 observed hours total | Original DEX only, including delisted metadata entries. Excludes HIP-3 DEXs, other venues and trader identities. Open interest is not net new money or a directional position count. |
 | Legacy WETH/USDC evidence | One pool, 300 returned swaps and selected sender balances at one finalized cutoff | Preserved as its own earlier sample in the wallet/DEX pane; not merged with the newer UNI/LINK/AAVE acquisition ledger. |
 | DeFi context | Source-dated chain TVL, circulating stablecoin USD valuations and historical valuations | Valuation changes may include issuance, redemption, prices, FX or depegs; they are not token purchases or verified capital inflows. |
 
@@ -100,9 +100,17 @@ node refresh_data.cjs hedera-holders ton-holders dex-acquisition derivatives
 
 The pipeline validates each job's outputs and restores that job's previous published files byte-for-byte on failure. The event study must match the source archive hash and cutoff. `data/collection-status.json` records the attempted jobs, outcomes and file hashes. Retaining old data does not reset its original observation time. Provider restrictions halt the affected collector without access-control workarounds.
 
-`.github/workflows/refresh.yml` configures a six-hour GitHub Actions schedule: `23 */6 * * *` UTC, or 01:23, 07:23, 13:23 and 19:23 Asia/Ho_Chi_Minh. A manual dispatch and changes to the workflow on `main` can also trigger it. Scheduled execution may be delayed by GitHub. The first collector run (38986650596, 2026-10-17) did not start; automated collection is currently blocked. The separate Pages deployment succeeded. The UI reports the blocked collection state, and `data/automation-status.json` is replaced only after a subsequent Actions collection can actually execute. Do not describe this schedule as operational until a successful end-to-end run is verified. The workflow collects, runs the Node checks, commits coherent public snapshots and requests a Pages rebuild.
+`.github/workflows/refresh.yml` configures a six-hour GitHub Actions schedule: `23 */6 * * *` UTC, or 01:23, 07:23, 13:23 and 19:23 Asia/Ho_Chi_Minh. A manual dispatch can also trigger it; publishing workflow edits does not itself retry a blocked collector. Scheduled execution may be delayed by GitHub. The first collector run (38986650596, 2026-10-17) did not start; automated collection is currently blocked. The separate Pages deployment succeeded. The UI reports the blocked collection state, and `data/automation-status.json` is replaced only after a subsequent Actions collection can actually execute. Do not describe this schedule as operational until a successful end-to-end run is verified. The workflow collects, runs the Node checks, commits coherent public snapshots and requests a Pages rebuild.
 
-UTC daily history only advances when another day has closed; refreshing every six hours does not manufacture four new daily observations. Source-specific timestamps can differ. Browser price refreshes do not trigger all server collectors. Research reload rereads the published archive. TON browser refresh observations remain in that page's memory until the public collector publishes another snapshot. Catalog/TVL/stablecoin observations retain their source dates when their sections were not recollected.
+UTC daily history only advances when another day has closed; refreshing every six hours does not manufacture four new daily observations. Source-specific timestamps can differ. Venue browser price refreshes do not trigger all server collectors. The global reload reads only verified published gzip packages; it does not launch a catalog crawl. Research reload rereads the published archive. TON browser refresh observations remain in that page's memory until the public collector publishes another snapshot. Catalog/TVL/stablecoin observations retain their source dates when their sections were not recollected.
+
+The full-catalog collector freezes `/coins/list`, requests at most 249 owned IDs plus an exact Bitcoin anchor in each market batch, and reads the catalog again after completion. Requests start at least eight seconds apart and stop at the first HTTP/network/JSON failure. Checkpoints preserve original receipt times. The snapshot/coverage pair is published only after integrity validation; interrupted attempts remain separately labelled in `data/market-collection-attempt.json`. Complete means the named source catalog at the recorded collection interval, never every token on every chain. A rate-limited run is not retried through another route.
+
+## A1 comparison status
+
+No live numeric observation is verified equal to A1Radar. The MEFI page currently redirects to sign-in. Valid comparisons require the same canonical asset, venue, quote currency, start/end time, timezone, units, aggregation, rounding and model version. A1 documentation describes Daily Net Order Flow as aggressor buy minus sell, but does not fully specify those matching keys. Its sector treemap describes FDV; this application displays provider circulating market capitalization. ASI depends on a separately classified wallet population and undisclosed full weights. August 7 documentation predates September algorithm changes.
+
+The DUSK screenshot is not a valid numeric pair: A1 screenshot $0.1210 / +12.86% / $18.51M lacks exact time and aggregation. Binance DUSKUSDT closed UTC October 16 at 0.1237 USDT / +12.25045% / 3,643,299.8722 USDT turnover. The difference does not establish which provider is wrong.
 
 ## Provenance and remaining gaps
 

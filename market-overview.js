@@ -5,20 +5,44 @@ const TTL=900000,MAX_SKEW=300000;
 const PERIODS=Object.freeze({'1h':{field:'return1hPct',label:'1H'},'24h':{field:'return24hPct',label:'24H'},'7d':{field:'return7dPct',label:'7D'},'30d':{field:'return30dPct',label:'30D'},'1y':{field:'return1yPct',label:'1Y'}});
 const finite=n=>typeof n==='number'&&Number.isFinite(n);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pct=n=>finite(n)?(n>0?'+':'')+n.toLocaleString('vi-VN',{maximumFractionDigits:2})+'%':'—';
-const human=n=>!finite(n)?'—':Math.abs(n)>=1e9?(n/1e9).toLocaleString('vi-VN',{maximumFractionDigits:2})+'B':Math.abs(n)>=1e6?(n/1e6).toLocaleString('vi-VN',{maximumFractionDigits:2})+'M':n.toLocaleString('vi-VN',{maximumFractionDigits:2});
+const pct=n=>!finite(n)?'—':(n>0?'+':'')+(n!==0&&Math.abs(n)<.000001?n.toExponential(3):n.toLocaleString('vi-VN',{maximumFractionDigits:n!==0&&Math.abs(n)<.01?8:2}))+'%';
+const human=n=>!finite(n)?'—':Math.abs(n)>=1e9?(n/1e9).toLocaleString('vi-VN',{maximumFractionDigits:2})+'B':Math.abs(n)>=1e6?(n/1e6).toLocaleString('vi-VN',{maximumFractionDigits:2})+'M':n!==0&&Math.abs(n)<.000001?n.toExponential(3):n.toLocaleString('vi-VN',{maximumFractionDigits:n!==0&&Math.abs(n)<.01?8:2});
 const fresh=(time,now)=>finite(time)&&time<=now+60000&&now-time<=TTL;
 function periodInfo(period){const p=PERIODS[period];if(!p)throw Error('Khung biến động không được hỗ trợ');return p;}
-function selectGlobal(rows,{query='',period='24h',limit=40,now=Date.now(),sort='marketcap',minVolume=0}={}){
- const p=periodInfo(period),q=query.trim().toLowerCase(),matching=rows.filter(r=>!q||[r.id,r.symbol,r.name].some(v=>String(v).toLowerCase().includes(q)));
- const valid=r=>r&&r.sourceId==='coingecko'&&r.key==='coingecko:'+r.id&&finite(r[p.field])&&r[p.field]>=-100&&finite(r.volume24hUsd)&&r.volume24hUsd>0&&r.volume24hUsd>=minVolume&&fresh(r.providerUpdatedAt,now);
- const available=matching.filter(valid).map(r=>({...r,key:'coingecko:'+r.id,sourceId:'coingecko',sourceName:'CoinGecko',base:r.symbol.toUpperCase(),instrument:r.id,quote:'USD',x:r[p.field]/100,y:r.volume24hUsd,last:r.priceUsd,asOf:r.providerUpdatedAt,windowLabel:p.label}));
- const benchmark=rows.find(r=>r.id==='bitcoin'&&valid(r));
- const normalizedBTC=benchmark?{key:'coingecko:bitcoin',sourceId:'coingecko',instrument:'bitcoin',returnPct:benchmark[p.field],asOf:benchmark.providerUpdatedAt,windowLabel:p.label}:null;
- for(const r of available){r.benchmark=normalizedBTC;r.benchmarkComparable=!!normalizedBTC&&Math.abs(r.asOf-normalizedBTC.asOf)<=MAX_SKEW;r.relativeToBTCPct=r.benchmarkComparable?r.x*100-normalizedBTC.returnPct:null;}
+/* A long catalog crawl is not an atomic price snapshot. Captured mode checks each
+   observation against its original receipt; current mode never silently falls back. */
+function selectGlobal(rows,{query='',period='24h',limit=40,now=Date.now(),sort='marketcap',minVolume=0,freshness='captured',benchmarksByBatch=null}={}){
+ const p=periodInfo(period),q=query.trim().toLowerCase();
+ if(!Array.isArray(rows)||!['captured','current'].includes(freshness))throw Error('Phạm vi thời điểm không hợp lệ');
+ const matching=rows.filter(r=>r&&(!q||[r.id,r.symbol,r.name].some(v=>String(v).toLowerCase().includes(q))));
+ const reference=r=>freshness==='captured'?r.fetchedAt:now;
+ const valid=(r,volume=minVolume)=>r&&r.sourceId==='coingecko'&&r.key==='coingecko:'+r.id&&finite(r[p.field])&&r[p.field]>=-100&&finite(r.volume24hUsd)&&r.volume24hUsd>0&&r.volume24hUsd>=volume&&fresh(r.providerUpdatedAt,reference(r));
+ const available=matching.filter(r=>valid(r)).map(r=>({...r,key:'coingecko:'+r.id,sourceId:'coingecko',sourceName:'CoinGecko',base:r.symbol.toUpperCase(),instrument:r.id,quote:'USD',x:r[p.field]/100,y:r.volume24hUsd,last:r.priceUsd,asOf:r.providerUpdatedAt,windowLabel:p.label}));
+ const legacy=rows.find(r=>r.id==='bitcoin'&&!r.sourceBatch&&valid(r,0));
+ const normalize=(r,batchId=null)=>r&&r.id==='bitcoin'&&valid(r,0)?{key:'coingecko:bitcoin',sourceId:'coingecko',instrument:'bitcoin',returnPct:r[p.field],asOf:r.providerUpdatedAt,fetchedAt:r.fetchedAt,sourceBatch:batchId,sourceSha256:r.sourceSha256||null,windowLabel:p.label}:null;
+ const normalizedBTC=normalize(legacy),used=new Map();
+ for(const r of available){
+  let b=null;
+  if(r.sourceBatch){const anchor=benchmarksByBatch instanceof Map?benchmarksByBatch.get(r.sourceBatch):benchmarksByBatch?.[r.sourceBatch];if(anchor&&anchor.sourceBatch===r.sourceBatch&&anchor.sourceSha256===r.sourceSha256)b=normalize(anchor,r.sourceBatch);}
+  else b=normalizedBTC;
+  r.benchmark=b;r.benchmarkComparable=!!b&&Math.abs(r.asOf-b.asOf)<=MAX_SKEW;r.relativeToBTCPct=r.benchmarkComparable?r.x*100-b.returnPct:null;
+  if(b)used.set(b.sourceBatch||'legacy',b);
+ }
  const sorts={marketcap:(a,b)=>(b.marketCapUsd||0)-(a.marketCapUsd||0),volume:(a,b)=>b.y-a.y,gainers:(a,b)=>b.x-a.x,losers:(a,b)=>a.x-b.x,absolute:(a,b)=>Math.abs(b.x)-Math.abs(a.x)};
  if(!sorts[sort])throw Error('Thứ tự không được hỗ trợ');available.sort((a,b)=>sorts[sort](a,b)||a.key.localeCompare(b.key));
- return {matching:matching.length,available:available.length,missing:matching.length-available.length,rows:available.slice(0,limit==='all'?available.length:Math.max(1,Math.floor(Number(limit)||40))),allRows:available,benchmark:normalizedBTC,period,label:p.label};
+ const comparable=available.filter(r=>r.benchmarkComparable).length;
+ return {matching:matching.length,available:available.length,missing:matching.length-available.length,rows:available.slice(0,limit==='all'?available.length:Math.min(400,Math.max(1,Math.floor(Number(limit)||40)))),allRows:available,benchmark:normalizedBTC,benchmarks:[...used.values()],benchmarkComparable:comparable,benchmarkUnavailable:available.length-comparable,period,label:p.label,freshness};
+}
+/* Pagination bounds browser work without changing which IDs belong to the universe. */
+function pageRows(rows,{limit='all',page=1,allPageSize=200,maxItems=400}={}){
+ if(!Array.isArray(rows)||!Number.isInteger(allPageSize)||allPageSize<1||allPageSize>400||!Number.isInteger(maxItems)||maxItems<1||maxItems>400)throw Error('Phân trang không hợp lệ');
+ const all=limit==='all',pageSize=all?allPageSize:Math.min(maxItems,Math.max(1,Math.floor(Number(limit)||40))),total=rows.length,pages=all?Math.max(1,Math.ceil(total/pageSize)):1,current=Math.min(pages,Math.max(1,Math.floor(Number(page)||1))),start=all?(current-1)*pageSize:0;
+ return {rows:rows.slice(start,start+pageSize),page:current,pages,pageSize,total,start,end:Math.min(total,start+pageSize),all};
+}
+function selectCatalog(ledger,{query='',status='all',now=Date.now(),freshness='captured',pricedRows=[]}={}){
+ if(!ledger||!Array.isArray(ledger.entries)||!['captured','current'].includes(freshness))throw Error('Danh mục chưa được xác minh');
+ const q=query.trim().toLowerCase(),checkFreshness=Array.isArray(pricedRows),prices=new Map((pricedRows||[]).map(r=>[r.id,r])),known=['all','priced','stale','no_quote','missing','invalid','error','unattempted'];if(!known.includes(status))throw Error('Trạng thái danh mục không hợp lệ');
+ return ledger.entries.filter(r=>{const values=[r.id,r.symbol,r.name,...Object.entries(r.platforms||{}).flat()];if(q&&!values.some(v=>String(v).toLowerCase().includes(q)))return false;const price=prices.get(r.id),stale=checkFreshness&&r.status==='priced'&&(!price||!fresh(price.providerUpdatedAt,freshness==='captured'?price.fetchedAt:now));return status==='all'||(status==='stale'?stale:r.status===status);}).map(r=>{const price=prices.get(r.id)||null;return {...r,price,stale:checkFreshness&&r.status==='priced'&&(!price||!fresh(price.providerUpdatedAt,freshness==='captured'?price.fetchedAt:now))};});
 }
 function selectVenue(rows,{now=Date.now()}={}){
  const available=rows.filter(r=>r&&typeof r.sourceId==='string'&&r.key===r.sourceId+':'+r.instrument&&finite(r.return24)&&r.return24>=-1&&finite(r.turnover24)&&r.turnover24>0&&fresh(r.asOf,now));
@@ -51,5 +75,5 @@ function parseCategories(raw,{fetchedAt=Date.now(),now=Date.now()}={}){
  return {rows,errors,inputCount:raw.length,fetchedAt};
 }
 function validateCategories(raw){if(!raw||raw.schemaVersion!==1||raw.provider!=='CoinGecko'||raw.currency!=='USD'||!finite(raw.generatedAt)||!Array.isArray(raw.rows)||!raw.source||typeof raw.source.url!=='string'||!/^https:\/\/api\.coingecko\.com\/api\/v3\/coins\/categories\?/.test(raw.source.url)||!Number.isInteger(raw.source.inputCount)||raw.source.inputCount<raw.rows.length||!/^[a-f0-9]{64}$/.test(raw.source.sha256))throw Error('Bản nhóm ngành không hợp lệ');const seen=new Set();for(const r of raw.rows){if(typeof r.id!=='string'||!r.id||seen.has(r.id)||typeof r.name!=='string'||!r.name)throw Error('Nhóm ngành thiếu/trùng định danh');seen.add(r.id);if(!finite(r.marketCapUsd)||r.marketCapUsd<0||!finite(r.volume24hUsd)||r.volume24hUsd<0||!finite(r.marketCapChange24hPct)||r.marketCapChange24hPct< -100||!finite(r.providerUpdatedAt)||!finite(r.fetchedAt)||r.providerUpdatedAt>r.fetchedAt+60000||!Array.isArray(r.topCoinIds)||r.topCoinIds.some(id=>typeof id!=='string'||!id))throw Error('Số liệu nhóm ngành không hợp lệ');}return raw;}
- return {TTL,MAX_SKEW,PERIODS,periodInfo,selectGlobal,selectVenue,movers,countertrend,bubbleGrid,render,parseCategories,validateCategories,esc,pct,human};
+ return {TTL,MAX_SKEW,PERIODS,periodInfo,selectGlobal,pageRows,selectCatalog,selectVenue,movers,countertrend,bubbleGrid,render,parseCategories,validateCategories,esc,pct,human};
 });
