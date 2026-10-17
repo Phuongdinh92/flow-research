@@ -164,3 +164,12 @@ No authenticated private research backend, credentials, portfolio or trading ope
 - https://docs.a1radar.com/vi/features/accumulation-strength-index
 
 The decoded `data/coinlore-market.json` is a local collector output; the public repository distributes its exact bytes as `coinlore-market.json.gz` plus the SHA-256 manifest. The browser validates and decompresses that package, without a raw-JSON fallback. The decoded dataset can be reproduced with Node `zlib.gunzipSync` or `gunzip`.
+
+
+### v0.9.6: visible updates and source-bound market layouts
+
+The price terminal paints an exact BTC-only 401-day preview (21,387-byte gzip) before the full universe and optional analysis feeds; actual byte progress, finite timeouts and cancellation keep a slow optional source from holding the chart blank. The original 511-pair archive and timestamps remain unchanged. Rebuild the preview after daily research. Hidden research UI no longer starts a second full download at page startup.
+
+The market map opens on the source-provided Top100 rank filter, with the full catalog/search still selectable. Columns show six separate period slots; unavailable 15M/1M/1Y CoinLore returns stay explicitly unavailable. Top Movers uses provider rank buckets and independent gain/loss panels. Different providers and time windows are never assumed equal to A1Radar.
+
+CoinLore publishes each parsed page to an explicitly partial UI overlay immediately, preserving native IDs, raw source hash and individual response/receipt times; no-quote observations remove the previous quote. A validated complete catalog remains the only persistable snapshot. IndexedDB stores its exact JSON plus SHA256, validates on reload, and cannot renew original source clocks. Full scans still run serially at >=1.1s/request and repeat after10min while visible. The radar animation is tied to actual scan receipts/stream activity; waiting, paused, stale and blocked states are distinct.

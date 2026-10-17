@@ -25,6 +25,48 @@
   const timeMs = t => finite(t) ? t : typeof t === 'string' && Number.isFinite(Date.parse(t)) ? Date.parse(t) : null;
   const short = s => typeof s === 'string' && s.length > 22 ? s.slice(0, 10) + '…' + s.slice(-8) : s;
   const safeLink = (url, label) => { try { const u = new URL(url); return u.protocol === 'https:' && !u.username && !u.password ? '<a href="' + esc(u.href) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + ' ↗</a>' : esc(label); } catch (_) { return esc(label); } };
+  function abortError(message='Lần nạp này đã được thay thế.') { return Object.assign(new Error(message),{name:'AbortError',code:'load_aborted'}); }
+  async function boundedLoad(task,{timeoutMs=60000,signal,onProgress=()=>{}}={}) {
+    if(signal?.aborted)throw signal.reason||abortError();
+    const controller=new AbortController();let timer,remove=()=>{};
+    const stopped=new Promise((_,reject)=>{
+      const abort=()=>{const reason=signal.reason||abortError();controller.abort(reason);reject(reason);};
+      if(signal){signal.addEventListener('abort',abort,{once:true});remove=()=>signal.removeEventListener('abort',abort);}
+      timer=setTimeout(()=>{const reason=Object.assign(new Error('Quá thời gian chờ '+Math.round(timeoutMs/1000)+' giây; đã dừng lần tải này.'),{code:'load_timeout'});controller.abort(reason);reject(reason);},timeoutMs);
+    });
+    try{return await Promise.race([Promise.resolve().then(()=>task({signal:controller.signal,onProgress})),stopped]);}
+    finally{clearTimeout(timer);remove();}
+  }
+  function progressFetch(fetchImpl,{signal,onProgress=()=>{},priority='auto'}={}) {
+    return async(url,init={})=>{
+      if(signal?.aborted)throw signal.reason||abortError();
+      const manifest=String(url).includes('manifest'),phase=manifest?'manifest':'download';onProgress({phase,url,loaded:0});
+      const response=await fetchImpl(url,{...init,signal:signal||init.signal,priority});
+      return {ok:response.ok,status:response.status,headers:response.headers,
+        json:async()=>{const value=await response.json();onProgress({phase:'manifest-ready',url});return value;},
+        arrayBuffer:async()=>{
+          const reader=response.body?.getReader?.();let bytes;
+          if(!reader)bytes=await response.arrayBuffer();
+          else{const chunks=[];let size=0;try{for(;;){if(signal?.aborted)throw signal.reason||abortError();const next=await reader.read();if(next.done)break;size+=next.value.byteLength;if(size>40*1024*1024)throw Error('Tệp tải vượt giới hạn 40 MB.');chunks.push(next.value);onProgress({phase,url,loaded:size});}}catch(error){await reader.cancel().catch(()=>{});throw error;}const out=new Uint8Array(size);let offset=0;for(const chunk of chunks){out.set(chunk,offset);offset+=chunk.byteLength;}bytes=out.buffer;}
+          onProgress({phase:'verify',url,loaded:bytes.byteLength});return bytes;
+        }};
+    };
+  }
+  async function loadInStages({primary,secondary=[],onPrimary=()=>{},onSecondary=()=>{},onProgress=()=>{},signal,primaryTimeoutMs=60000,secondaryTimeoutMs=35000,concurrency=2}) {
+    const data=await boundedLoad(primary,{timeoutMs:primaryTimeoutMs,signal,onProgress:p=>onProgress('primary',p)});
+    if(signal?.aborted)throw signal.reason||abortError();await onPrimary(data);
+    let next=0;const results=new Array(secondary.length);
+    const worker=async()=>{while(next<secondary.length&&!signal?.aborted){const index=next++,job=secondary[index];let result;try{onProgress(job.key,{phase:'start'});const value=await boundedLoad(job.load,{timeoutMs:job.timeoutMs||secondaryTimeoutMs,signal,onProgress:p=>onProgress(job.key,p)});result={status:'fulfilled',value};}catch(reason){result={status:'rejected',reason};}if(signal?.aborted)break;results[index]=result;await onSecondary(job.key,result);}};
+    await Promise.all(Array.from({length:Math.min(secondary.length,Math.max(1,Math.floor(concurrency)))},worker));
+    if(signal?.aborted)throw signal.reason||abortError();return {primary:data,secondary:results};
+  }
+  function validatePreview(preview,R,now=Date.now()) {
+    if(!preview||preview.schemaVersion!==1||preview.kind!=='terminal-price-preview'||preview.sourceId!=='binance')throw Error('Sai bản nến mở nhanh.');
+    R.checkManifest(preview.parentManifest,now);const data=preview.data,keys=Object.keys(data?.histories||{});
+    if(keys.length!==1||keys[0]!=='binance:BTCUSDT'||data?.universe?.instruments?.length!==1||data.universe.instruments[0].key!==keys[0]||data.histories[keys[0]].bars?.length!==401||preview.parentManifest.sourceCoverage?.completed<1)throw Error('Bản mở nhanh phải chỉ chứa đúng 401 nến BTC / USDT.');
+    const manifest={...preview.parentManifest,sourceCoverage:data.sourceCoverage,universe:{...preview.parentManifest.universe,eligibleInstrumentCount:1}};
+    R.validateDataset(data,manifest,now);return preview;
+  }
   const empty = (title, detail = '') => '<div class="terminal-empty"><strong>' + esc(title) + '</strong>' + (detail ? '<p>' + esc(detail) + '</p>' : '') + '</div>';
   const pill = (text, tone = 'neutral') => '<span class="terminal-pill ' + tone + '">' + esc(text) + '</span>';
   const cardHead = (kicker, title, right = '') => '<div class="terminal-card-head"><div><span class="terminal-kicker">' + esc(kicker) + '</span><h3>' + esc(title) + '</h3></div>' + right + '</div>';
@@ -87,7 +129,7 @@
   function proofHtml(history,manifest) {
     if(!history)return '<p class="terminal-caption">Chưa ghép lịch sử sàn với tài sản này.</p>';
     const p=Array.isArray(history.provenance)?history.provenance:[history.provenance];
-    return '<details class="terminal-proof"><summary>Nguồn, định danh và phép tính</summary><p><b>'+esc(history.key)+'</b> · '+esc(history.base)+' / '+esc(history.quote)+' · '+esc(history.sourceId)+'. Mã này được giữ theo sàn, không tự ghép với token cùng ticker.</p><p>'+history.bars.length+' nến UTC đã đóng · mốc nguồn '+stamp(history.asOf)+' · nhận '+stamp(history.fetchedAt)+'.</p><p>Taker share = tổng quote mua chủ động / tổng quote giao dịch. Delta = 2 × quote mua chủ động − tổng quote. CVD đặt lại ở đầu cửa sổ và sau điểm thiếu; không phải tiền mới vào thị trường.</p>'+(manifest?.snapshot?'<p>Gói nến SHA-256 <code>'+esc(manifest.snapshot.sha256)+'</code> · đã kiểm tra cả dữ liệu nén và giải nén.</p>':'')+p.filter(Boolean).map(z=>'<p>'+safeLink(z.url,'Nến gốc '+history.instrument)+'<br><code>'+esc(z.sha256)+'</code></p>').join('')+'</details>';
+    return '<details class="terminal-proof"><summary>Nguồn, định danh và phép tính</summary><p><b>'+esc(history.key)+'</b> · '+esc(history.base)+' / '+esc(history.quote)+' · '+esc(history.sourceId)+'. Mã này được giữ theo sàn, không tự ghép với token cùng ticker.</p><p>'+history.bars.length+' nến UTC đã đóng · mốc nguồn '+stamp(history.asOf)+' · nhận '+stamp(history.fetchedAt)+'.</p><p>Taker share = tổng quote mua chủ động / tổng quote giao dịch. Delta = 2 × quote mua chủ động − tổng quote. CVD đặt lại ở đầu cửa sổ và sau điểm thiếu; không phải tiền mới vào thị trường.</p>'+(manifest?.previewTransport?'<p>Bản mở nhanh BTC đã kiểm tra SHA-256 nén và giải nén <code>'+esc(manifest.previewTransport.decodedSha256)+'</code>. Gói toàn bộ danh mục được nạp riêng; mã băm gói cha bên dưới hiện là tham chiếu, chưa được trình duyệt xác minh.</p><p>Gói cha <code>'+esc(manifest.snapshot.sha256)+'</code></p>':manifest?.snapshot?'<p>Gói nến SHA-256 <code>'+esc(manifest.snapshot.sha256)+'</code> · đã kiểm tra cả dữ liệu nén và giải nén.</p>':'')+p.filter(Boolean).map(z=>'<p>'+safeLink(z.url,'Nến gốc '+history.instrument)+'<br><code>'+esc(z.sha256)+'</code></p>').join('')+'</details>';
   }
   function evidenceLadder({history,holder=false,acquisition=false,retention=false,identity=false}) {
     const steps=[['01','Lực mua chủ động',!!history,'Dữ liệu khớp lệnh'],['02',acquisition?'Nhận token':'Số dư địa chỉ',holder||acquisition,acquisition?'Đã đối chiếu giao dịch':'Đã quan sát · chưa xác nhận mua'],['03','Giữ lại vị thế',retention,'Cần đối chiếu dòng token sau mua'],['04','Chủ thể & lịch sử',identity,'Cần nhãn và lịch sử trước tín hiệu']];
@@ -176,11 +218,12 @@
     if(typeof document==='undefined')return;
     const host=document.getElementById('terminal');if(!host||host.dataset.initialized)return;host.dataset.initialized='true';
     const G=globalThis,S=G.FlowSignals,C=G.FlowCharts,V=G.FlowChartsView,R=G.FlowResearch,I=G.FlowIntelligence;
-    const state={data:null,manifest:null,analyses:[],key:'binance:BTCUSDT',mode:'price',window:180,interval:'1d',query:'',holders:null,holderHistory:null,ledger:null,ledgerSha:null,inventory:null,study:null,derivatives:null,livePrices:null,costReference:null,showEma50:true,showEma200:true,showRealized:true,flowData:null,flowStatus:{status:"idle"},flowController:null,flowInstrument:null,flowPaused:false,flowSourceBlocked:null,flowEpoch:0,flowPaintAt:0,flowTimer:null,flowPage:1,errors:{},initialized:false};
+    const state={data:null,manifest:null,analyses:[],key:'binance:BTCUSDT',mode:'price',window:180,interval:'1d',query:'',holders:null,holderHistory:null,ledger:null,ledgerSha:null,inventory:null,study:null,derivatives:null,livePrices:null,costReference:null,showEma50:true,showEma200:true,showRealized:true,flowData:null,flowStatus:{status:"idle"},flowController:null,flowInstrument:null,flowPaused:false,flowSourceBlocked:null,flowEpoch:0,flowPaintAt:0,flowTimer:null,flowPage:1,errors:{},initialized:false,loading:{},preview:false,loadEpoch:0,loadController:null};
     host.classList.add('flow-terminal');
     host.innerHTML='<div class="terminal-heading"><div><span class="terminal-kicker">FLOW / TOKEN RESEARCH TERMINAL</span><h2>Biểu đồ giá & dải tham chiếu</h2><p>Đọc giá và lực khớp lệnh, rồi đối chiếu lịch sử số dư, giao dịch và lượng còn giữ.</p></div>'+pill('Số đo có nguồn · kiểm tra được','cyan')+'</div><div class="terminal-toolbar"><label for="terminal-search"><span>Tìm trong danh mục nguồn</span><input id="terminal-search" type="search" placeholder="HBAR, WLD, BTC, NOT…" autocomplete="off" maxlength="80" aria-controls="terminal-search-results"></label><div id="terminal-search-results" class="terminal-search-results" role="list" aria-label="Kết quả tìm tài sản"></div><button id="terminal-reload">Đọc lại bản thu thập ↻</button></div><div id="terminal-status" class="terminal-caption" role="status" aria-live="polite">Đang đọc nến và kiểm tra nguồn…</div><div id="terminal-context"></div><div id="terminal-token-head"></div><div id="terminal-live-quote"></div><div id="terminal-diagnosis"></div><div id="terminal-ladder"></div><div class="terminal-local-nav" aria-label="Các lớp nghiên cứu"><a href="#terminal-price">Giá & dòng khớp</a><a href="#terminal-holders">Holder</a><a href="#terminal-ledger">Giao dịch & tồn kho</a><a href="#terminal-basis">Giá vốn</a><a href="#terminal-study">Nghiên cứu sự kiện</a></div><article class="terminal-card" id="terminal-price">'+cardHead('01 / MARKET TAPE','Giá, dòng khớp lệnh và sự kiện')+'<div id="terminal-price-body">'+empty('Đang kiểm tra lịch sử')+'</div><div id="terminal-live-flow"></div></article><article class="terminal-card" id="terminal-holders">'+cardHead('02 / HOLDER POSITIONING','Số dư theo nhóm địa chỉ')+'<div id="terminal-holder-body">'+empty('Đang đọc các tài sản được hỗ trợ')+'</div></article><article class="terminal-card" id="terminal-ledger">'+cardHead('03 / TRANSACTION EVIDENCE','Mua thực tế, nơi nhận và tồn kho')+'<div id="terminal-ledger-body">'+empty('Đang đọc bằng chứng giao dịch')+'</div><div id="terminal-inventory-body"></div></article><div class="terminal-columns"><article class="terminal-card" id="terminal-basis">'+cardHead('04 / COST BASIS','Giá vốn và tuổi vị thế')+'<div id="terminal-basis-body"></div></article><article class="terminal-card" id="terminal-clusters">'+cardHead('05 / WALLET BEHAVIOR','Mối liên hệ giữa các địa chỉ')+'<div id="terminal-cluster-body"></div></article></div><article class="terminal-card" id="terminal-study">'+cardHead('06 / EVENT STUDY','Điều gì xảy ra sau điều kiện quan sát?')+'<div id="terminal-study-body"></div></article><article class="terminal-card">'+cardHead('DATA COVERAGE','Các lớp dữ liệu của hệ thống')+readiness()+'</article><div id="terminal-chart-readout" class="terminal-chart-readout" aria-live="polite">Rê chuột hoặc dùng Tab và phím mũi tên trên biểu đồ để đọc từng quan sát.</div>';
     host.querySelector('#terminal-study').insertAdjacentHTML('afterend','<article class="terminal-card" id="terminal-derivatives">'+cardHead('07 / DERIVATIVES CONTEXT','Vị thế mở, funding và độ lệch giá')+'<div id="terminal-derivatives-body"></div></article>');
     const $=id=>document.getElementById(id);
+    $('terminal-status').insertAdjacentHTML('afterend','<details class="terminal-proof" id="terminal-loading"><summary>Tiến trình nạp dữ liệu</summary><div id="terminal-loading-body"></div></details>');
     const overview=document.createElement('details');overview.className='terminal-research-fold';overview.innerHTML='<summary>Bối cảnh, lực mua và phạm vi bằng chứng</summary>';
     ['terminal-context','terminal-diagnosis','terminal-ladder'].forEach(id=>overview.appendChild($(id)));$('terminal-price').after(overview);
     const flowFold=document.createElement('details');flowFold.className='terminal-research-fold';flowFold.innerHTML='<summary>Lệnh khớp đang quan sát · Binance</summary>';flowFold.appendChild($('terminal-live-flow'));$('terminal-price').appendChild(flowFold);flowFold.addEventListener('toggle',()=>syncFlow(history()));
@@ -292,19 +335,65 @@
     host.addEventListener('change',e=>{if(e.target.matches('[data-terminal-window]'))state.window=Number(e.target.value);else if(e.target.matches('[data-terminal-interval]'))state.interval=e.target.value;else if(e.target.matches('[data-terminal-holder-anchor]'))state.holderAnchor=e.target.value;else if(e.target.matches('[data-terminal-perp]'))state.perpNative=e.target.value;else if(e.target.matches('[data-terminal-funding-period]'))state.fundingPeriod=e.target.value;else if(e.target.matches('[data-terminal-ledger-token]')){state.ledgerToken=e.target.value;state.acquisitionId=null;}else if(e.target.matches('[data-terminal-holder-exclude]'))state.holderExcludeKnown=e.target.checked;else if(e.target.matches('[data-terminal-holder-bound-group]'))state.holderBoundGroup=Number(e.target.value);else return;render();});
     $('terminal-search').addEventListener('input',e=>{state.query=e.target.value;renderSearch();});
     $('terminal-search').addEventListener('keydown',e=>{if(e.key==='Enter'){const hit=$('terminal-search-results').querySelector('button');if(hit){e.preventDefault();hit.click();}}});
-    async function optional(url,validator){if(!G.FlowPublicData?.loadJSON)throw Error('Chưa nạp bộ kiểm tra bản dữ liệu nén.');if(typeof validator!=='function')throw Error('Chưa nạp bộ kiểm tra cấu trúc dữ liệu.');return G.FlowPublicData.loadJSON(url,{fetchImpl:options.fetcher||fetch,validate:validator});}
-    async function load(){if(state.busy)return;state.busy=true;$('terminal-reload').disabled=true;try{if(!S||!C||!V||!R)throw Error('Chưa nạp đủ bộ tính và bộ vẽ.');const results=await Promise.allSettled([
-        (options.loadResearch||R.loadDataset)(),
-        optional('./data/holders-snapshot.json',G.FlowHolders?.validateSnapshot),
-        optional('./data/holder-history-snapshot.json',G.FlowHolderHistory?.validateSnapshot),
-        G.FlowPublicData.loadVerified('./data/chain-ledger-snapshot.json',{fetchImpl:options.fetcher||fetch,validate:(G.ChainLedger||G.FlowChainLedger)?.validateSnapshot}),
-        optional('./data/intelligence-study.json',G.FlowIntelligence?.validateStudy),
-        optional('./data/derivatives-snapshot.json',d=>{G.FlowDerivatives?.validateSnapshot(d);return d;}),
-        optional('./data/inventory-ledger.json',d=>{if(d?.kind!=='partial-inventory-reconciliation')throw Error('Sai bản đối soát tồn kho');return d;}),
-        optional('./data/cost-reference.json',G.FlowCostReference?.validateSnapshot)
-      ]);if(results[0].status==='rejected')throw results[0].reason;state.data=results[0].value.data;state.manifest=results[0].value.manifest;state.analyses=R.analyzeAll(state.data,S).analyses.map(a=>({...a,instrumentClass:G.FlowInstrumentClasses?.classify(a.sourceId,a.instrument)}));if(results[3].status==='fulfilled'){state.ledgerSha=results[3].value.manifest.payload.decodedSha256;results[3]={status:'fulfilled',value:results[3].value.data};}for(const [i,k]of[[1,'holders'],[2,'holderHistory'],[3,'ledger'],[4,'study'],[5,'derivatives'],[6,'inventory'],[7,'costReference']])if(results[i].status==='fulfilled')state[k]=results[i].value;else{state[k]=null;state.errors[k]=results[i].reason.message;}if(state.inventory){try{if(!G.InventoryLedger?.validateReport||!state.ledger||!state.ledgerSha)throw Error('Thiếu nguồn cùng thế hệ');G.InventoryLedger.validateReport(state.inventory,state.ledger,{sourceSnapshotSha256:state.ledgerSha});}catch(e){state.inventory=null;state.errors.inventory=e.message;}}if(state.study){try{if(!I?.verifyStudy)throw Error('Chưa có bộ xác minh nghiên cứu.');await I.verifyStudy(state.study,{expectedSourceSha256:state.manifest.snapshot.sha256,expectedCutoff:state.data.endTime,fetchImpl:options.fetcher||fetch});}catch(e){state.study=null;state.errors.study=e.message;}}if(!history())state.key=state.analyses[0]?.key;renderContext();render();$('terminal-status').textContent=state.data.sourceCoverage.completed+'/'+state.data.sourceCoverage.eligible+' cặp đã đọc và kiểm tra SHA-256 · nến cuối '+day(state.data.endTime)+' UTC · thu thập '+stamp(state.data.finishedAt||state.data.generatedAt)+'.'+(state.data.endTime!==Math.floor(Date.now()/DAY)*DAY-1?' Bản nến chưa có ngày UTC vừa đóng.':'');}
-      catch(e){$('terminal-status').textContent='Chưa đọc được bản mới: '+e.message+(state.data?' Giữ nguyên dữ liệu có thời điểm đang xem.':'');}finally{state.busy=false;$('terminal-reload').disabled=false;}}
+    const LOAD_LABELS={primary:'Biểu đồ BTC mở nhanh',research:'Danh mục nến đầy đủ',costReference:'Giá vốn tham chiếu',holders:'Holder TON',holderHistory:'Lịch sử holder HBAR',ledger:'Sổ giao dịch',derivatives:'Phái sinh',inventory:'Đối soát tồn kho',study:'Nghiên cứu sự kiện'};
+    const OPTIONAL_KEYS=['holders','holderHistory','ledger','study','derivatives','inventory','costReference'];
+    function loadDescription(value){
+      if(!value)return 'Chưa bắt đầu';if(value.status==='done')return 'Đã kiểm tra';if(value.status==='error')return 'Lỗi: '+value.error;
+      const labels={start:'Đang nạp',manifest:'Đang đọc hồ sơ mã băm','manifest-ready':'Đang chờ dữ liệu nén',download:'Đang tải dữ liệu nén',verify:'Đã tải, đang kiểm tra mã băm và cấu trúc',fallback:'Bản mở nhanh chưa dùng được; đang nạp gói nến đầy đủ',analyze:'Đang tính từ nến đã xác minh'};
+      return (labels[value.phase]||'Đang nạp')+(finite(value.loaded)&&value.loaded>0?' · '+fmt(value.loaded/1048576,2)+' MB thực nhận':'')+(value.note?' · '+value.note:'');
+    }
+    function renderLoading(){
+      const done=OPTIONAL_KEYS.filter(k=>state.loading[k]?.status==='done').length,failed=Object.entries(state.loading).filter(([,v])=>v.status==='error');
+      if(state.data){const coverage=state.data.sourceCoverage;const prefix=state.preview?'Đã hiện BTC từ bản mở nhanh đã kiểm tra SHA-256. '+(state.loading.research?.status==='error'?'Danh mục đầy đủ chưa nạp được.':'Danh mục đầy đủ đang nạp riêng.'):coverage.completed+'/'+coverage.eligible+' cặp đã đọc và kiểm tra SHA-256';$('terminal-status').textContent=prefix+' · nến cuối '+day(state.data.endTime)+' UTC · thu thập '+stamp(state.data.finishedAt||state.data.generatedAt)+'.'+(state.data.endTime!==Math.floor(Date.now()/DAY)*DAY-1?' Bản nến chưa có ngày UTC vừa đóng.':'')+' Lớp bổ sung '+done+'/'+OPTIONAL_KEYS.length+' đã kiểm tra'+(failed.length?' · '+failed.length+' lỗi; xem tiến trình.':state.backgroundBusy?' · không chặn biểu đồ giá.':'.');}
+      else $('terminal-status').textContent=state.loading.primary?.status==='error'?'Không nạp được nến: '+state.loading.primary.error+'. Không tạo nến thay thế.':loadDescription(state.loading.primary);
+      $('terminal-loading-body').innerHTML=Object.entries(state.loading).map(([key,value])=>'<p><b>'+esc(LOAD_LABELS[key]||key)+'</b> · '+esc(loadDescription(value))+'</p>').join('');
+    }
+    async function optional(url,validator,context){if(!G.FlowPublicData?.loadJSON)throw Error('Chưa nạp bộ kiểm tra bản dữ liệu nén.');if(typeof validator!=='function')throw Error('Chưa nạp bộ kiểm tra cấu trúc dữ liệu.');return G.FlowPublicData.loadJSON(url,{fetchImpl:progressFetch(options.fetcher||fetch,{...context,priority:'low'}),signal:context.signal,validate:validator});}
+    function commitResearch(result){
+      state.data=result.data;state.manifest=result.manifest;state.preview=!!result.preview;
+      state.analyses=R.analyzeAll(state.data,S).analyses.map(a=>({...a,instrumentClass:G.FlowInstrumentClasses?.classify(a.sourceId,a.instrument)}));
+      if(!history())state.key=state.analyses.find(a=>a.key==='binance:BTCUSDT')?.key||state.analyses[0]?.key;
+      if(!history()||!analysis())throw Error('Bản nến không có cặp hợp lệ để hiển thị.');renderContext();render();state.initialized=true;
+    }
+    async function load(){
+      if(state.busy)return;state.loadController?.abort(abortError());const controller=new AbortController(),epoch=++state.loadEpoch;state.loadController=controller;state.busy=true;state.backgroundBusy=true;state.loading={primary:{phase:'start'}};$('terminal-reload').disabled=true;renderLoading();
+      const current=()=>epoch===state.loadEpoch&&!controller.signal.aborted;
+      const update=(key,value)=>{if(!current())return;state.loading[key]={status:'loading',...value};renderLoading();};
+      let usedPreview=false,fullReadyResolve,ledgerReadyResolve;
+      const fullReady=new Promise(resolve=>{fullReadyResolve=resolve;}),ledgerReady=new Promise(resolve=>{ledgerReadyResolve=resolve;});
+      const primary=async context=>{
+        if(!S||!C||!V||!R)throw Error('Chưa nạp đủ bộ tính và bộ vẽ.');
+        try{
+          const loaded=await boundedLoad(ctx=>G.FlowPublicData.loadVerified('./data/terminal-preview.json',{fetchImpl:progressFetch(options.fetcher||fetch,{...ctx,priority:'high'}),signal:ctx.signal,validate:preview=>validatePreview(preview,R)}),{timeoutMs:options.previewTimeoutMs||12000,signal:context.signal,onProgress:context.onProgress});
+          usedPreview=true;return {data:loaded.data.data,manifest:{...loaded.data.parentManifest,previewTransport:loaded.manifest.payload},preview:true};
+        }catch(error){if(context.signal.aborted)throw error;update('primary',{phase:'fallback',note:error.message});return (options.loadResearch||R.loadDataset)(progressFetch(options.fetcher||fetch,{...context,priority:'high'}));}
+      };
+      const jobs=[
+        {key:'research',timeoutMs:options.researchTimeoutMs||65000,load:async context=>usedPreview?(options.loadResearch||R.loadDataset)(progressFetch(options.fetcher||fetch,{...context,priority:'high'})):{data:state.data,manifest:state.manifest}},
+        {key:'costReference',load:context=>optional('./data/cost-reference.json',G.FlowCostReference?.validateSnapshot,context)},
+        {key:'holders',load:context=>optional('./data/holders-snapshot.json',G.FlowHolders?.validateSnapshot,context)},
+        {key:'holderHistory',load:context=>optional('./data/holder-history-snapshot.json',G.FlowHolderHistory?.validateSnapshot,context)},
+        {key:'ledger',load:context=>G.FlowPublicData.loadVerified('./data/chain-ledger-snapshot.json',{fetchImpl:progressFetch(options.fetcher||fetch,{...context,priority:'low'}),signal:context.signal,validate:(G.ChainLedger||G.FlowChainLedger)?.validateSnapshot})},
+        {key:'derivatives',load:context=>optional('./data/derivatives-snapshot.json',G.FlowDerivatives?.validateSnapshot,context)},
+        {key:'inventory',load:async context=>{await ledgerReady;if(context.signal.aborted)throw context.signal.reason||abortError();const report=await optional('./data/inventory-ledger.json',d=>{if(d?.kind!=='partial-inventory-reconciliation')throw Error('Sai bản đối soát tồn kho');return d;},context);if(!G.InventoryLedger?.validateReport||!state.ledger||!state.ledgerSha)throw Error('Thiếu nguồn giao dịch cùng thế hệ');G.InventoryLedger.validateReport(report,state.ledger,{sourceSnapshotSha256:state.ledgerSha});return report;}},
+        {key:'study',load:async context=>{await fullReady;if(context.signal.aborted)throw context.signal.reason||abortError();const study=await optional('./data/intelligence-study.json',G.FlowIntelligence?.validateStudy,context);if(!I?.verifyStudy)throw Error('Chưa có bộ xác minh nghiên cứu.');await I.verifyStudy(study,{expectedSourceSha256:state.manifest.snapshot.sha256,expectedCutoff:state.data.endTime,fetchImpl:progressFetch(options.fetcher||fetch,{...context,priority:'low'})});return study;}}
+      ];
+      try{
+        await loadInStages({primary,secondary:jobs,signal:controller.signal,primaryTimeoutMs:options.primaryTimeoutMs||80000,secondaryTimeoutMs:options.optionalTimeoutMs||35000,concurrency:2,onProgress:update,
+          onPrimary:result=>{if(!current())return;for(const key of OPTIONAL_KEYS){state[key]=null;delete state.errors[key];}delete state.errors.primary;state.ledgerSha=null;update('primary',{phase:'analyze'});commitResearch(result);state.loading.primary={status:'done'};state.busy=false;$('terminal-reload').disabled=false;renderLoading();},
+          onSecondary:(key,result)=>{if(!current())return;
+            if(result.status==='fulfilled'){
+              try{if(key==='research'){if(usedPreview)commitResearch(result.value);}else if(key==='ledger'){state.ledgerSha=result.value.manifest.payload.decodedSha256;state.ledger=result.value.data;}else state[key]=result.value;delete state.errors[key];state.loading[key]={status:'done'};}
+              catch(reason){result={status:'rejected',reason};}
+            }
+            if(result.status==='rejected'){state.errors[key]=result.reason.message;state.loading[key]={status:'error',error:result.reason.message};if(key!=='research')state[key]=null;}
+            if(key==='research')fullReadyResolve();if(key==='ledger')ledgerReadyResolve();
+            const selected=analysis();if(selected){if(key==='costReference'){let intelligence=null;try{intelligence=I?.analyze?.(history(),{now:Date.now()});}catch(error){state.errors.intelligence=error.message;}renderPrice(history(),selected,intelligence);}else if(['holders','holderHistory'].includes(key))renderHolders(selected);else if(['ledger','inventory'].includes(key)){renderLedger(selected);if(state.ledger)$('terminal-cluster-body').innerHTML=clusterHtml(state.ledger,{tokenAddress:state.ledgerToken});}else if(key==='derivatives')renderDerivatives(selected);else if(key==='study')$('terminal-study-body').innerHTML=state.study?studyHtml(state.study,state.key):empty('Chưa xác minh được nghiên cứu khớp bản nến',state.errors.study);wireChartSamples();}renderLoading();}
+        });
+      }catch(error){if(current()){state.errors.primary=error.message;state.loading.primary={status:'error',error:error.message};if(!state.data)$('terminal-price-body').innerHTML=empty('Không tải được biểu đồ giá',error.message+' · Có thể bấm “Đọc lại bản thu thập” để thử lại.');renderLoading();}}
+      finally{fullReadyResolve();ledgerReadyResolve();if(current()){state.busy=false;state.backgroundBusy=false;$('terminal-reload').disabled=false;renderLoading();}}
+    }
     $('terminal-reload').addEventListener('click',load);load();return {reload:load,state};
   }
-  return Object.freeze({esc,liveQuoteHtml,inventoryHtml,orderFlowHtml,fundingPercent,fundingMetric,rankTokens,deriveContext,lineChart,barChart,diagnosis,evidenceLadder,proofHtml,readiness,holderChartData,nearestCheckpoint,ledgerHtml,clusterHtml,studyHtml,init});
+  return Object.freeze({esc,liveQuoteHtml,inventoryHtml,orderFlowHtml,fundingPercent,fundingMetric,rankTokens,deriveContext,lineChart,barChart,diagnosis,evidenceLadder,proofHtml,readiness,holderChartData,nearestCheckpoint,ledgerHtml,clusterHtml,studyHtml,boundedLoad,progressFetch,loadInStages,validatePreview,init});
 });

@@ -17,6 +17,7 @@ const jobs=[
    if(m.collectionState!=='complete'||m.sourceCoverage.errors!==0||m.sourceCoverage.completed!==m.sourceCoverage.eligible||sha(b)!==m.snapshot.sha256||sha(decoded)!==m.snapshot.decodedSha256)throw Error('Research collection incomplete or hash mismatch; previous generation retained');
    require('./research-ui.js').validateDataset(JSON.parse(decoded),m);
  }},
+ {id:'terminal-preview',script:'build_terminal_preview.cjs',files:['data/terminal-preview.json','data/terminal-preview.json.gz','data/terminal-preview.json.manifest.json'],timeout:60000,validate(){const p=json(this.files[0]),m=json('data/research-manifest.json'),B=require('./build_terminal_preview.cjs');if(JSON.stringify(p.parentManifest)!==JSON.stringify(m))throw Error('Preview parent manifest mismatch');require('./research-ui.js').validateDataset(p.data,B.subsetManifest(m,p.data));}},
  {id:'event-study',script:'collect_intelligence.cjs',files:['data/intelligence-study.json'],timeout:180000,validate(){
    const s=json(this.files[0]),m=json('data/research-manifest.json');
    if(s.source.sha256!==m.snapshot.sha256||s.cutoff!==m.endTime)throw Error('Study and research archive differ');
