@@ -47,6 +47,7 @@ async function main(){
  }
  require('./pack-data.cjs').packAll();
  report.finishedAt=Date.now();report.status=report.jobs.every(j=>j.status==='ok')?'complete':report.jobs.every(j=>j.status==='error')?'error':'partial';
+ if(process.env.GITHUB_ACTIONS){const a=path.join(ROOT,'data/automation-status.json');fs.writeFileSync(a+'.tmp',JSON.stringify({schemaVersion:1,state:report.status==='error'?'blocked':report.status==='complete'?'complete':'partial',observedAt:report.finishedAt,provider:'GitHub Actions',lastAttemptRunId:Number(process.env.GITHUB_RUN_ID)||null}));fs.renameSync(a+'.tmp',a);}
  const p=path.join(ROOT,'data/collection-status.json');fs.writeFileSync(p+'.tmp',JSON.stringify(report));fs.renameSync(p+'.tmp',p);
  console.log(JSON.stringify({status:report.status,jobs:report.jobs.map(j=>({id:j.id,status:j.status,message:j.message}))}));
  if(report.status==='error')process.exitCode=1;

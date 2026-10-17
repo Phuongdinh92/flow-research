@@ -34,6 +34,18 @@ test('chart observations expose keyboard and pointer readouts with actual units'
  const bars=T.barChart([{label:'Mất dữ liệu',value:null},{label:'Giảm',value:-12,exact:'−12.00000001'}],{unit:'HBAR',horizontal:true});
  assert.match(bars,/Thiếu/);assert.match(bars,/−12\.00000001 HBAR/);assert.doesNotMatch(bars,/NaN|Infinity/);
 });
+test('funding display preserves actual nonzero hourly rates, including sub-rounding positive and negative values',()=>{
+ const snapshot=json('derivatives-snapshot.json'),btc=snapshot.assets.find(a=>a.nativeName==='BTC');assert.ok(btc&&btc.fundingRateHourly!==0);
+ const rates=[btc.fundingRateHourly,1.25e-5,-1.25e-5,1e-12,-1e-12,Number.MIN_VALUE,-Number.MIN_VALUE];
+ for(const rate of rates){const text=T.fundingPercent(rate);assert.notEqual(text,'+0%');assert.notEqual(text,'0%');assert.notEqual(text,'-0%');assert.ok(Number(text.replace('%','').replace(',','.'))!==0,text);assert.equal(text.startsWith('-'),rate<0);}
+ assert.equal(T.fundingPercent(0),'0%');assert.equal(T.fundingPercent(null),'—');
+ const metric=T.fundingMetric(btc);assert.match(metric,/Raw native funding fraction/);assert.ok(metric.includes(btc.rawContext.funding));assert.ok(metric.includes(T.fundingPercent(btc.fundingRateHourly)));
+ const chart=T.lineChart([{time:1,funding:1e-12,rawRate:'0.000000000001'}],[{key:'funding',label:'Funding',format:(v,row)=>T.fundingPercent(v)+' · native fraction: '+row.rawRate,appendUnit:false}],{axisFormat:T.fundingPercent,unit:'Funding · % / kỳ',zero:true});
+ assert.match(chart,/native fraction: 0\.000000000001/);assert.match(chart,/e-10%/);assert.doesNotMatch(chart,/>\+0%<|Funding: \+0%/);
+});
+test('HBAR default chart anchor spans 30 days while an explicit chosen anchor is preserved',()=>{
+ assert.equal(T.holderChartData(history,H).anchor.id,'30d');assert.equal(T.holderChartData(history,H,'7d').anchor.id,'7d');
+});
 test('holder observations alone do not certify a purchase, retention or owner',()=>{
  const html=T.evidenceLadder({history:{},holder:true});
  assert.match(html,/Số dư địa chỉ/);assert.match(html,/Đã quan sát · chưa xác nhận mua/);assert.doesNotMatch(html,/>Nhận token</);
@@ -49,6 +61,19 @@ test('actual acquisition ledger renders receipt routes and zero-to-upper retenti
  assert.match(html,/Phạm vi độc lập với binance:UNIUSDT/);assert.match(html,/chưa tự nối token cùng ticker/);
  assert.match(html,/GIÁ THỰC HIỆN SWAP/);assert.match(html,/chưa là giá vốn tồn kho/);assert.match(html,/giới hạn có thể, chưa phải lượng đã xác nhận giữ/);
  assert.match(html,/Contract/);assert.doesNotMatch(html,/NaN|Infinity/);assert.match(html,/data-terminal-acquisition=/);
+});
+test('checkpoint selection chooses nearest requested day consistently regardless of source order',()=>{
+ const fixture=[{daysBeforeFinalized:6.02,deltaRaw:'-241'},{daysBeforeFinalized:7.99,deltaRaw:'-301'},{daysBeforeFinalized:7.02,deltaRaw:'-105'}],before=structuredClone(fixture);
+ assert.equal(T.nearestCheckpoint(fixture,7),fixture[2]);assert.equal(T.nearestCheckpoint([...fixture].reverse(),7),fixture[2]);assert.deepEqual(fixture,before);
+ assert.equal(T.nearestCheckpoint(fixture,1),null);assert.equal(T.nearestCheckpoint([{daysBeforeFinalized:7.3}],7),null);assert.equal(T.nearestCheckpoint([{daysBeforeFinalized:null}],7),null);
+});
+test('actual AAVE recipient chart and table use the same nearest seven-day block and exact delta',()=>{
+ const token=ledger.tokens.find(t=>t.symbol==='AAVE'),activity=L.addressActivity(ledger,token.address),position=activity.find(a=>a.address==='0x51c72848c68a965f66fa7a88855f9f7784502a7f');assert.ok(position);
+ const checkpoint=T.nearestCheckpoint(position.balanceChanges,7),independent=position.balanceChanges.reduce((best,p)=>Math.abs(p.daysBeforeFinalized-7)<Math.abs(best.daysBeforeFinalized-7)?p:best);assert.equal(checkpoint,independent);
+ const exact=L.formatUnits(checkpoint.deltaRaw,token.decimals,10),html=T.ledgerHtml(ledger,L,{tokenAddress:token.address}),inventory=html.slice(html.indexOf('RECIPIENT INVENTORY'),html.indexOf('<table class="terminal-ledger-table"'));
+ const addressLabel=position.address.slice(0,10)+'…'+position.address.slice(-8),tips=[...inventory.matchAll(/data-terminal-tip="([^"]+)"/g)].map(m=>m[1]),tip=tips.find(t=>t.startsWith(addressLabel+':'));
+ assert.ok(tip.includes(exact+' AAVE'),tip);assert.ok(tip.includes(checkpoint.timestamp.slice(0,19).replace('T',' ')),tip);assert.ok(tip.includes('block '+checkpoint.blockNumber),tip);
+ assert.ok(inventory.includes('>'+exact+'<small class="terminal-checkpoint-time">'),exact);assert.match(inventory,/Biểu đồ và bảng dùng chung mốc/);
 });
 test('ambiguous acquisition exposes no fabricated final recipient or acquired amount',()=>{
  const ambiguous=ledger.acquisitions.find(a=>!a.finalRecipient);assert.ok(ambiguous);
