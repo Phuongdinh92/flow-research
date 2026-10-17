@@ -135,7 +135,7 @@ test('live quote overlay preserves independent venues and immutable saved timest
  const q={...row('binance'),last:103,eventTime:now,asOf:now,receivedAt:now+5};
  const mixed=U.applyLiveSources([a,b],{rows:[q],status:{state:'live'}},a.rows);
  assert.equal(JSON.stringify([a,b]),original);assert.equal(mixed.find(s=>s.sourceId==='bitget'),b);
- const live=mixed.find(s=>s.sourceId==='binance');assert.equal(live.rows.find(r=>r.base==='BTC').last,103);assert.equal(live.rows.find(r=>r.base==='ETH').asOf,old);assert.equal(live.rows.find(r=>r.base==='ETH').mode,'saved');
+ const live=mixed.find(s=>s.sourceId==='binance');assert.equal(live.rows.find(r=>r.base==='BTC').last,103);assert.equal(live.savedAsOf,a.asOf);assert.equal(live.savedFetchedAt,a.fetchedAt);assert.equal(live.rows.find(r=>r.base==='ETH').asOf,old);assert.equal(live.rows.find(r=>r.base==='ETH').mode,'saved');
  const viewed=U.rowsFor(mixed,{now:now+10001});assert.equal(viewed.find(r=>r.key==='binance:BTCUSDT').stale,true);assert.equal(viewed.find(r=>r.key==='bitget:BTCUSDT').asOf,old);
 });
 test('live overlay rejects foreign, mismatched and unregistered quotes while retaining full registry scope',()=>{
@@ -156,7 +156,7 @@ test('stream changes update searched market and preserve open historical dialog 
  const h=domHarness(fetcher,async id=>source(id),undefined,undefined,{live:fake});h.ctx.FlowMarket.registry=require('./market.js').registry;await flush();await flush();assert(listener);
  h.nodes.search.value='BTC';h.nodes.search.handlers.input();h.nodes.table.handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();h.nodes['detail-body'].handlers.click({target:{closest:sel=>sel==='[data-chart-mode]'?{dataset:{chartMode:'cvd'}}:null}});const before=h.nodes['detail-body'].innerHTML;assert.match(before,/chart-cvd-line/);
  engineStatus={...engineStatus,state:'live',observedCount:1,freshCount:1,accepted:1,lastEventAt:now,lastReceivedAt:now+4};listener.onUpdate({rows:[{...row('binance'),last:123.456,eventTime:now,receivedAt:now+4}],changedRows:[],status:engineStatus});await new Promise(resolve=>setTimeout(resolve,1050));
- assert.match(h.nodes.table.innerHTML,/123,456/);assert.match(h.nodes.table.innerHTML,/WebSocket/);assert.equal(h.nodes.search.value,'BTC');assert.equal(h.nodes.detail.open,true);assert.equal(h.nodes['detail-body'].innerHTML,before);assert.match(h.nodes['live-market-clock'].textContent,/Sự kiện nguồn cuối/);
+ assert.match(h.nodes.table.innerHTML,/123,456/);assert.match(h.nodes.table.innerHTML,/WebSocket/);assert.equal(h.nodes.search.value,'BTC');assert.equal(h.nodes.detail.open,true);assert.equal(h.nodes['detail-body'].innerHTML,before);assert.match(h.nodes['live-market-clock'].textContent,/Sự kiện nguồn cuối/);assert.match(h.nodes['coverage-sub'].textContent,/cặp đủ mới · .* nguồn có toàn bộ danh mục đủ mới/);assert.match(h.nodes.coverage.innerHTML,/Luồng · sự kiện ticker mới nhất:/);assert.match(h.nodes.coverage.innerHTML,/Bản giá nền · thời điểm nguồn:/);assert.match(h.nodes.coverage.innerHTML,/Danh mục spot\/USDT được xác nhận:/);
  h.nodes['live-market-toggle'].handlers.click();assert.equal(active,false);assert.match(h.nodes['live-market-status'].textContent,/tạm dừng/);assert.equal(h.nodes['live-market-toggle'].textContent,'Tiếp tục');await new Promise(resolve=>setTimeout(resolve,1050));assert.doesNotMatch(h.nodes['overview-chart'].innerHTML,/data-key="binance:BTCUSDT"/);assert.match(h.nodes['chart-exclusions'].textContent,/tạm dừng.*5 giây/);assert.match(h.nodes.table.innerHTML,/Cũ ·/);
 });
 

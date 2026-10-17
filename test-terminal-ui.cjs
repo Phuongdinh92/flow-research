@@ -117,3 +117,9 @@ test('untrusted token text and source URLs cannot inject markup or active links'
  const html=T.proofHtml({key:'<img>',base:'X',quote:'USDT',sourceId:'binance',bars:[],asOf:1,fetchedAt:2,provenance:[{url:'javascript:alert(1)',sha256:'<b>'}]});
  assert.doesNotMatch(html,/href="javascript:/);assert.doesNotMatch(html,/<img>/);assert.match(html,/&lt;b&gt;/);
 });
+test('empty orderflow identifies its exact instrument and connection state instead of appearing frozen',()=>{
+ const connecting=T.orderFlowHtml({instrument:'HBARUSDT',count:0},{status:'connecting'});assert.match(connecting,/Cặp HBARUSDT/);assert.match(connecting,/Đang kết nối Binance/);assert.match(connecting,/Đã nhận 0 bản ghi aggTrade/);
+ const waiting=T.orderFlowHtml({instrument:'BTCUSDT',count:0},{status:'waiting',connectedAt:Date.UTC(2026,9,17)});assert.match(waiting,/Đã kết nối · chờ aggTrade đầu tiên/);assert.match(waiting,/kết nối 2026-10-17/);assert.match(waiting,/không chứng minh thị trường không có giao dịch/);
+ const stopped=T.orderFlowHtml(null,{status:'stopped'},{instrument:'ETHUSDT'});assert.match(stopped,/Cặp ETHUSDT/);assert.match(stopped,/Quan sát đã tạm dừng/);assert.doesNotMatch(stopped,/Đang kết nối Binance/);
+ const blocked=T.orderFlowHtml(null,{status:'blocked',reason:'<blocked>',instrument:'<script>'});assert.match(blocked,/&lt;blocked&gt;/);assert.match(blocked,/&lt;script&gt;/);assert.doesNotMatch(blocked,/<script>/);
+});
