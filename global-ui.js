@@ -145,5 +145,5 @@ $('#global-map').addEventListener('click',e=>{const n=e.target.closest('[data-ke
 $('nav').addEventListener('click',e=>{if(e.target.closest('[data-panel]')?.dataset.panel==='market')setTimeout(render,0);});
 let resizeTimer;globalThis.addEventListener?.('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(render,300);});
 setInterval(()=>{if(snapshot)render();},60000);
-load();
+const lazyFolds=Array.from(document.querySelectorAll('#market details.legacy-reference'));let firstLoadStarted=false;function startReference(){if(firstLoadStarted)return;firstLoadStarted=true;load();}for(const fold of lazyFolds)fold.addEventListener('toggle',()=>{if(fold.open)startReference();});if(!lazyFolds.length||lazyFolds.some(f=>f.open))startReference();
 }

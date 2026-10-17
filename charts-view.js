@@ -174,7 +174,18 @@
     if (mode === 'price') return dayText + '\nOpen: ' + exact(b.open) + ' USDT\nHigh: ' + exact(b.high) + ' USDT\nLow: ' + exact(b.low) + ' USDT\nClose: ' + exact(b.close) + ' USDT\nQuote volume (' + INTERVALS[interval].name + '): ' + exact(b.quote) + ' USDT';
     return dayText + '\n' + (mode === 'cvd' ? 'CVD từ đầu cửa sổ: ' + exact(b.cvd) : 'Taker delta (' + INTERVALS[interval].name + '): ' + exact(b.delta)) + ' USDT\nTaker mua: ' + exact(b.buy) + ' USDT\nTaker bán: ' + exact(b.sell) + ' USDT\nClose: ' + exact(b.close) + ' USDT';
   }
-  const priceRegistry = new Map(); let priceSequence = 0;
+  const priceRegistry = new Map(), priceControllers = new WeakMap(); let priceSequence = 0;
+  function priceValue(value) { if (Math.abs(value) < .0001) return value.toExponential(5); const decimals = Math.abs(value) >= 1 ? 2 : Math.min(12, Math.max(2, 7 - Math.floor(Math.log10(Math.abs(value))))); return value.toLocaleString('en-US', { minimumFractionDigits: Math.min(2, decimals), maximumFractionDigits: decimals }); }
+  function updatedViewport(previous, next, lo, hi) {
+    if (!next.length) return { lo: 0, hi: 0 };
+    const count = Math.max(1, hi - lo);
+    if (lo === 0 && hi === previous.length) return { lo: 0, hi: next.length };
+    if (hi === previous.length) return { lo: Math.max(0, next.length - count), hi: next.length };
+    const from = previous[lo]?.time, to = previous[hi - 1]?.time;
+    let first = next.findIndex(b => b.time >= from); if (first < 0) first = Math.max(0, next.length - count);
+    let last = next.findIndex(b => b.time > to); if (last < 0) last = next.length;
+    return { lo: first, hi: Math.max(first + 1, last) };
+  }
   function priceDaily(bars, options) {
     const { width, interval, height = 620, showSma20 = true, showEma50 = true, showEma200 = true, showLatestLabels = true, priceTracks = [] } = options;
     const w = widthOf(width), h = finite(height) ? Math.max(420, Math.min(1000, height)) : 620;
@@ -221,8 +232,8 @@
     svg += text(right + 9, vTop + 5, human(volumes.ticks.at(-1).value), 'chart-tick', 'start') + text(right + 9, vBottom + 4, '0', 'chart-tick', 'start');
     bars.forEach((b, index) => {
       const cx = center(b), open = y.map(b.open), close = y.map(b.close), barWidth = candleWidth(b);
-      const readout = barTitle(b, 'price', interval) + tracks.filter(t => finite(t.values[index])).map(t => '\n' + t.label + ': ' + exact(t.values[index]) + ' USDT').join('');
-      svg += '<g class="chart-candle ' + direction(b.close - b.open) + '" data-price-sample="' + index + '" data-chart-x="' + coord(cx) + '" data-chart-y="' + coord(close) + '" data-chart-date="' + esc(date(b.end)) + '"><title>' + esc(readout) + '</title>' + line(cx, y.map(b.high), cx, y.map(b.low), 'chart-wick') + '<rect class="chart-candle-body" x="' + coord(cx - barWidth / 2) + '" y="' + coord(Math.min(open, close)) + '" width="' + coord(barWidth) + '" height="' + coord(Math.max(0.8, Math.abs(close - open))) + '"/><rect class="chart-volume" x="' + coord(cx - barWidth / 2) + '" y="' + coord(volumes.map(b.quote)) + '" width="' + coord(barWidth) + '" height="' + coord(vBottom - volumes.map(b.quote)) + '"/></g>';
+      const readout = barTitle(b, 'price', interval) + (b.sourceSessionClosed ? '\nNến đã đóng nhận trong phiên trực tiếp · chưa ghi vào nghiên cứu' : '') + (b.provisional ? '\nNến đang hình thành · chưa dùng nghiên cứu\nSự kiện kline: ' + new Date(b.eventTime).toISOString() : '') + tracks.filter(t => finite(t.values[index])).map(t => '\n' + t.label + ': ' + exact(t.values[index]) + ' USDT').join('');
+      svg += '<g class="chart-candle ' + direction(b.close - b.open) + (b.provisional ? ' chart-candle-provisional' : '') + '" data-provisional="' + !!b.provisional + '" data-price-sample="' + index + '" data-chart-x="' + coord(cx) + '" data-chart-y="' + coord(close) + '" data-chart-date="' + esc(date(b.end)) + '"><title>' + esc(readout) + '</title>' + line(cx, y.map(b.high), cx, y.map(b.low), 'chart-wick') + '<rect class="chart-candle-body" x="' + coord(cx - barWidth / 2) + '" y="' + coord(Math.min(open, close)) + '" width="' + coord(barWidth) + '" height="' + coord(Math.max(0.8, Math.abs(close - open))) + '"/><rect class="chart-volume" x="' + coord(cx - barWidth / 2) + '" y="' + coord(volumes.map(b.quote)) + '" width="' + coord(barWidth) + '" height="' + coord(vBottom - volumes.map(b.quote)) + '"/></g>';
     });
     const latestLabels = [];
     tracks.forEach((track, index) => {
@@ -243,7 +254,7 @@
     // Labels retain their true value while leaders separate crowded levels.
     if (showLatestLabels) {
       const last = bars.at(-1), priceY = y.map(last.close);
-      svg += line(left, priceY, right, priceY, 'chart-latest-price-line') + '<rect class="chart-current-price-box" x="' + (right + 1) + '" y="' + coord(priceY - 9) + '" width="' + (w - right - 5) + '" height="18" rx="2"/>' + text(right + 7, priceY + 4, human(last.close), 'chart-current-price-value', 'start');
+      svg += line(left, priceY, right, priceY, 'chart-latest-price-line') + '<rect class="chart-current-price-box" x="' + (right + 1) + '" y="' + coord(priceY - 9) + '" width="' + (w - right - 5) + '" height="18" rx="2"/>' + text(right + 7, priceY + 4, priceValue(last.close), 'chart-current-price-value', 'start');
       latestLabels.sort((a, b) => a.actualY - b.actualY);
       let previous = top - 19;
       for (const label of latestLabels) { label.labelY = Math.max(label.actualY, previous + 19); previous = label.labelY; }
@@ -326,15 +337,16 @@
     for (const initial of charts) {
       if (initial.dataset.priceBound) continue;
       const registered = priceRegistry.get(initial.dataset.priceChart); if (!registered) continue;
-      const base = registered.bars, options = registered.options;
+      let base = registered.bars; const options = registered.options;
       const shell = document.createElement('div'); shell.className = 'price-chart-shell'; initial.parentNode.insertBefore(shell, initial); shell.appendChild(initial);
       const controls = document.createElement('div'); controls.className = 'price-chart-navigation';
       controls.innerHTML = '<span>Rê chuột để đọc · kéo để dịch</span><button type="button" data-price-zoom="out" aria-label="Thu nhỏ biểu đồ">−</button><button type="button" data-price-zoom="in" aria-label="Phóng to biểu đồ">+</button><button type="button" data-price-zoom="reset">Đặt lại</button>';
       shell.appendChild(controls);
       const tooltip = document.createElement('div'); tooltip.className = 'price-chart-tooltip'; tooltip.hidden = true; shell.appendChild(tooltip);
-      let svg = initial, lo = 0, hi = base.length, selected = Math.max(0, base.length - 1), drag = null;
+      let svg = initial, lo = 0, hi = base.length, selected = Math.max(0, base.length - 1), drag = null, pendingUpdate = null, lastClientX;
       function updateControls() { controls.querySelector('[data-price-zoom="in"]').disabled = hi - lo <= Math.min(8, base.length); controls.querySelector('[data-price-zoom="out"]').disabled = hi - lo >= base.length; }
       function show(index, clientX) {
+        if (clientX !== undefined) lastClientX = clientX;
         const samples = svg.querySelectorAll('[data-price-sample]'); if (!samples.length) return;
         selected = Math.max(0, Math.min(samples.length - 1, index));
         const node = samples[selected], x = Number(node.dataset.chartX), y = Number(node.dataset.chartY), cross = svg.querySelector('.chart-crosshair');
@@ -347,9 +359,19 @@
         const shellBox = shell.getBoundingClientRect();
         tooltip.style.left = clientX && clientX - shellBox.left < shellBox.width * .52 ? 'auto' : '12px'; tooltip.style.right = clientX && clientX - shellBox.left < shellBox.width * .52 ? '12px' : 'auto';
       }
-      function redraw() {
+      function redraw(preserveReadout = false) {
+        const hadFocus = document.activeElement === svg, hadTip = preserveReadout && !tooltip.hidden;
         const holder = document.createElement('div'); holder.innerHTML = daily(base.slice(lo, hi), { ...options, mode: 'price' });
         const next = holder.firstElementChild; svg.replaceWith(next); svg = next; tooltip.hidden = true; attach(); updateControls();
+        if (hadTip) show(selected, lastClientX); if (hadFocus) svg.focus({ preventScroll: true });
+      }
+      function update(next) {
+        if (!Array.isArray(next) || !next.length) return false;
+        if (drag) { pendingUpdate = next; return true; }
+        const selectedTime = base[lo + selected]?.time, view = updatedViewport(base, next, lo, hi);
+        base = next.slice(); lo = view.lo; hi = view.hi;
+        const index = base.findIndex(b => b.time === selectedTime); selected = Math.max(0, Math.min(hi - lo - 1, index < 0 ? hi - lo - 1 : index - lo));
+        redraw(true); return true;
       }
       function zoom(factor) {
         const count = hi - lo, wanted = Math.min(base.length, Math.max(Math.min(8, base.length), Math.round(count * factor)));
@@ -372,6 +394,7 @@
           if (!drag) return;
           const shift = Math.round((drag.x - event.clientX) / svg.getBoundingClientRect().width * (hi - lo)), count = drag.hi - drag.lo;
           if (Math.abs(event.clientX - drag.x) > 8) { lo = Math.max(0, Math.min(base.length - count, drag.lo + shift)); hi = lo + count; redraw(); } drag = null;
+          if (pendingUpdate) { const next = pendingUpdate; pendingUpdate = null; update(next); }
         });
         svg.addEventListener('keydown', event => {
           // Existing callers may also expose focusable candle samples with
@@ -385,8 +408,14 @@
         svg.addEventListener('wheel', event => { if (document.activeElement !== svg) return; event.preventDefault(); zoom(event.deltaY < 0 ? .8 : 1.25); svg.focus(); }, { passive: false });
       }
       controls.addEventListener('click', event => { const action = event.target.closest('[data-price-zoom]')?.dataset.priceZoom; if (action === 'in') zoom(.65); else if (action === 'out') zoom(1.6); else if (action === 'reset') { lo = 0; hi = base.length; redraw(); } });
+      priceControllers.set(shell, { update });
       attach(); updateControls();
     }
   }
-  return Object.freeze({ scatter, bubble, daily, bindInteraction });
+  function updateDaily(container, series) {
+    if (!container || !Array.isArray(series) || !series.length) return false;
+    const shells = container.matches?.('.price-chart-shell') ? [container] : Array.from(container.querySelectorAll?.('.price-chart-shell') || []);
+    let updated = false; for (const shell of shells) if (priceControllers.get(shell)?.update(series)) updated = true; return updated;
+  }
+  return Object.freeze({ scatter, bubble, daily, bindInteraction, updateDaily, updatedViewport });
 });

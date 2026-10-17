@@ -2,7 +2,7 @@
  * access-error retry. Response time is not a quote's underlying update time. */
 (function(root,factory){'use strict';const api=factory(root.FlowCoinLore||(typeof require==='function'?require('./coinlore-core.js'):null));root.FlowCoinLoreLive=api;if(typeof module==='object'&&module.exports)module.exports=api;})(globalThis,function(C){
  'use strict';
- const SPACING=1100,REPEAT_MS=600000,MAX_PAGES=2000,MAX_BYTES=32*1024*1024;
+ const SPACING=1100,REPEAT_MS=30000,MAX_PAGES=2000,MAX_BYTES=32*1024*1024;
  const copy=x=>x===null?null:JSON.parse(JSON.stringify(x));
  function cacheDeadline(promise,ms=2000){let timer;const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Snapshot cache timed out')),ms);});return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));}
  async function sha256(bytes,cryptoImpl=globalThis.crypto){if(!cryptoImpl?.subtle?.digest)throw Error('SHA-256 unavailable');const hash=await cryptoImpl.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');}

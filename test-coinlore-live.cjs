@@ -52,6 +52,13 @@ test('concurrent starts share one pass and selected/visible/user-pause controls 
  h.controller.setActive({selected:false});assert.equal(h.timers.size,0);const before=h.calls.length;assert.equal((await h.controller.start()).paused,true);assert.equal(h.calls.length,before);
  h.controller.setPaused(true);h.controller.setActive({selected:true});await Promise.resolve();assert.equal(h.calls.length,before);h.controller.destroy();
 });
+test('normal continuous scans retain request spacing and a real thirty-second quiet interval',async()=>{
+ assert.equal(L.SPACING,1100);assert.equal(L.REPEAT_MS,30000);
+ const timed=harness({count:201,repeatMs:L.REPEAT_MS});await timed.controller.start();
+ assert.equal([...timed.timers.values()][0].ms,30000);
+ assert(timed.calls.slice(1).every((call,i)=>call.at-timed.calls[i].at>=1100));
+ timed.controller.destroy();
+});
 test('cross-provider or unverified prior images cannot survive a price refresh',async()=>{
  const first=harness({count:2});await first.controller.start();const previous=first.controller.current();first.controller.destroy();
  // A core-validated snapshot has null images unless exact-ID provenance exists.

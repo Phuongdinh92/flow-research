@@ -235,5 +235,5 @@ setInterval(render,60000);
 $('#source').innerHTML='<option value="all">Tất cả sàn đã kết nối</option>'+SOURCES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
 FlowUI.getMarketState=()=>({sources:visibleSources().map(s=>({...s,rows:s.rows.map(r=>({...r}))}))});
 FlowUI.getLiveState=()=>({rows:(state.live?.rows||[]).map(r=>({...r})),status:{...(state.live?.status||{})},metadata:{...state.liveMetadata},manualPaused:state.livePaused});
-initial();loadAuxiliary();
+initial();const historyFolds=Array.from(document.querySelectorAll('#market details.legacy-reference'));let auxiliaryStarted=false;function startAuxiliary(){if(auxiliaryStarted)return;auxiliaryStarted=true;loadAuxiliary();}for(const fold of historyFolds)fold.addEventListener('toggle',()=>{if(fold.open)startAuxiliary();});if(!historyFolds.length||historyFolds.some(f=>f.open))startAuxiliary();
 }

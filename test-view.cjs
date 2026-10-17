@@ -224,8 +224,27 @@ test('unverified, malformed, unmatched or ambiguous track inputs never produce p
 test('latest price labels retain nonzero tiny values and interaction binding is optional in Node', () => {
   const tiny = bars.slice(0, 3).map(b => ({ ...b, open: 1e-12, high: 3e-12, low: 1e-13, close: 2e-12 }));
   const svg = V.daily(tiny, { width: 240 });
-  assert(svg.includes('2.00e-12')); assert(svg.includes('chart-crosshair')); finiteSVG(svg);
+  const label = svg.match(/class="chart-current-price-value"[^>]*>([^<]+)</)[1]; assert.equal(Number(label), 2e-12); assert(svg.includes('chart-crosshair')); finiteSVG(svg);
   assert.equal(V.bindInteraction(null), undefined);
+});
+test('live updates retain a full viewport or a zoomed window pinned to the newest candle', () => {
+  const previous = bars.slice(0, 20), next = bars.slice(0, 21);
+  assert.deepEqual(V.updatedViewport(previous, next, 0, 20), { lo: 0, hi: 21 });
+  assert.deepEqual(V.updatedViewport(previous, next, 12, 20), { lo: 13, hi: 21 });
+  assert.deepEqual(V.updatedViewport(previous, previous.map(b => ({ ...b, close: b.close + .01 })), 12, 20), { lo: 12, hi: 20 });
+});
+test('live updates preserve a historical zoom by UTC dates instead of dragging it back to the newest price', () => {
+  const previous = bars.slice(0, 25), next = bars.slice(1, 26);
+  const view = V.updatedViewport(previous, next, 5, 13);
+  assert.equal(next[view.lo].time, previous[5].time); assert.equal(next[view.hi - 1].time, previous[12].time); assert.equal(view.hi - view.lo, 8);
+  assert.deepEqual(V.updatedViewport(previous, [], 5, 13), { lo: 0, hi: 0 });
+});
+test('forming candles are explicitly labelled and the latest price retains cent-level movement', () => {
+  const make = close => V.daily([{ ...bars.at(-1), open: 81500, low: 81000, high: 82000, close, provisional: true, eventTime: now }], { width: 1100 });
+  const first = make(81532.15), second = make(81532.16);
+  assert(first.includes('Nến đang hình thành · chưa dùng nghiên cứu')); assert(first.includes('data-provisional="true"'));
+  assert(first.includes('81,532.15')); assert(second.includes('81,532.16')); assert.notEqual(first, second); finiteSVG(first); finiteSVG(second);
+  assert.equal(V.updateDaily(null, bars), false);
 });
 
 for (const t of tests) { t.run(); console.log('ok - ' + t.name); }

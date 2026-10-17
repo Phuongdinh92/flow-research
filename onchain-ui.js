@@ -110,10 +110,11 @@
       catch (e) {$('holder-status').textContent = 'Chưa đọc được mới: ' + e.message + ' Đang giữ bản quan sát ' + date(token().fetchedAt) + '.';}
       finally {state.busy = false; render();}
     });
-    Promise.allSettled([
+    const loadObservations=()=>Promise.allSettled([
       H.loadSnapshot().then(s => { state.snapshot = s; render(); $('holder-status').textContent = 'Đã kiểm tra cấu trúc bản quan sát · ' + s.tokens.length + ' token TON · ' + number(s.tokens.reduce((n, t) => n + t.rows.length, 0), 0) + ' dòng token/địa chỉ. Thời điểm hiển thị là thời gian nhận nguồn, không phải giá trực tiếp.'; $('wallet-scope').textContent = s.tokens.length + ' token TON'; }),
       D.loadSnapshot('./data/dex-evidence-snapshot.json').then(s => {$('dex-body').innerHTML = dexDetails(s, D); $('dex-status').textContent = 'Bản quan sát có nguồn · ' + date(s.sources.trades.fetchedAt) + (s.freshness.isStale ? ' · Đã quá 15 phút, không phải dữ liệu trực tiếp.' : '') + ' · Ethereum / một pool Uniswap v3.';})
     ]).then(results => {if (results[0].status === 'rejected') {$('holder-status').textContent = 'Không đọc được bản số dư: ' + results[0].reason.message; $('holders-body').innerHTML = '<div class="chart-empty">Chưa có bản số dư hợp lệ.</div>';} if (results[1].status === 'rejected') {$('dex-status').textContent = 'Không đọc được bằng chứng DEX: ' + results[1].reason.message; $('dex-body').innerHTML = '<div class="chart-empty">Chưa có mẫu DEX hợp lệ.</div>';}});
+    const panel=$('onchain');let began=false;const start=()=>{if(!began){began=true;loadObservations();}};if(!panel?.hidden)start();if(panel&&typeof MutationObserver==='function')new MutationObserver(()=>{if(!panel.hidden)start();}).observe(panel,{attributes:true,attributeFilter:['hidden']});
   }
   return {distributionChart, comparison, deltaChart, changedOwners, holderDetails, holderTable, dexChart, dexDetails, init};
 });
