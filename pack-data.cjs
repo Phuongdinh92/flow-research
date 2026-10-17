@@ -2,7 +2,7 @@
 /* Publish gzip first, then an integrity/version manifest. Any mismatch fails closed in browser. */
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),zlib=require('node:zlib'),crypto=require('node:crypto');
-const DEFAULT_FILES=['holders-snapshot','holder-history-snapshot','chain-ledger-snapshot','intelligence-study','derivatives-snapshot','ecosystem-snapshot','market-categories'].map(n=>path.join(__dirname,'data',n+'.json')).concat(['market-coverage','market-collection-attempt'].map(n=>path.join(__dirname,'data',n+'.json')).filter(file=>fs.existsSync(file)));
+const DEFAULT_FILES=['holders-snapshot','holder-history-snapshot','chain-ledger-snapshot','intelligence-study','derivatives-snapshot','ecosystem-snapshot','market-categories'].map(n=>path.join(__dirname,'data',n+'.json')).concat(['market-coverage','market-collection-attempt','inventory-ledger'].map(n=>path.join(__dirname,'data',n+'.json')).filter(file=>fs.existsSync(file)));
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function atomicWrite(file,bytes){const tmp=file+'.tmp';fs.writeFileSync(tmp,bytes);fs.renameSync(tmp,file);}
 function packFile(file){

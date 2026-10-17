@@ -19,7 +19,12 @@ const same=selected([base,other]);assert.equal(same.rows.length,2);assert.equal(
 assert.equal(selected([base,other],{query:'different',limit:1}).rows[0].id,'different-asset');
 console.log('ok - shared ticker symbols retain distinct provider IDs with explicit market-cap selection');
 assert.throws(()=>selected([base],{period:'year'}));
-console.log('4 global display checks passed');
+const limitedLabels=G.priceScopeLabels({global:{rankScope:'top_market_cap'}},null);
+assert.match(limitedLabels.priced,/giới hạn/);assert.match(limitedLabels.catalog,/bản giá cũ/);assert.doesNotMatch(limitedLabels.priced,/hoạt động|toàn bộ/);
+assert.match(G.priceScopeLabels({global:{rankScope:'active_catalog'}},null).priced,/giới hạn/,'an unverified active-catalog declaration is not enough');
+assert.match(G.priceScopeLabels({global:{rankScope:'active_catalog'}},{counts:{}}).priced,/đã xác minh/);
+console.log('ok - price-card subtitles distinguish the verified full-catalog pair from the older limited price snapshot');
+console.log('5 global display checks passed');
 
 (async()=>{
  const clone=v=>JSON.parse(JSON.stringify(v)),sha='a'.repeat(64),old={snapshot:{global:{generationId:'old'}},categories:{rows:[]},coverage:{generationId:'old'},coverageSha256:'b'.repeat(64)},store=G.createBundleStore(old);

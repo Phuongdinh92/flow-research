@@ -17,3 +17,6 @@
 .research-filter-mark{fill:#8ce1c3;stroke:#10271e;stroke-width:.7}
 
 .automation-blocked{border-color:rgba(236,177,77,.36);color:#edc783;background:rgba(103,71,20,.16)}
+
+/* Real source events, separate from scheduled historical collection. */
+.live-market-card{margin:0 0 24px;padding:18px 20px;border:1px solid #345751;background:linear-gradient(130deg,#112722,#101923);border-radius:12px}.live-market-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.live-market-head strong{font-size:16px;font-weight:600}.live-market-card p{margin:7px 0 0;overflow-wrap:anywhere}.live-market-card[data-state="paused"],.live-market-card[data-state="stale"],.live-market-card[data-state="disconnected"],.live-market-card[data-state="blocked"]{border-color:#725d38;background:#231e17}#live-market-clock{font-variant-numeric:tabular-nums;color:var(--text)}#live-market-toggle{flex-shrink:0}@media(max-width:650px){.live-market-card{padding:15px}.live-market-head{flex-direction:column;gap:10px}.live-market-head strong{font-size:14px}}

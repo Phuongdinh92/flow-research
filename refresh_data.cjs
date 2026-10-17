@@ -23,6 +23,7 @@ const jobs=[
  {id:'hedera-holders',script:'collect_holder_history.cjs',files:['data/holder-history-snapshot.json'],timeout:1800000,validate(){require('./holder-history.js').validateSnapshot(json(this.files[0]));}},
  {id:'ton-holders',script:'collect_holders.cjs',files:['data/holders-snapshot.json'],timeout:180000,validate(){require('./holders.js').validateSnapshot(json(this.files[0]));}},
  {id:'dex-acquisition',script:'collect_chain_ledger.cjs',files:['data/chain-ledger-snapshot.json'],timeout:900000,validate(){require('./chain-ledger.js').validateSnapshot(json(this.files[0]));}},
+ {id:'inventory-reconciliation',script:'collect_inventory_ledger.cjs',files:['data/inventory-ledger.json'],timeout:180000,validate(){const chainBytes=fs.readFileSync(path.join(ROOT,'data/chain-ledger-snapshot.json'));require('./inventory-ledger.js').validateReport(json(this.files[0]),JSON.parse(chainBytes),{sourceSnapshotSha256:sha(chainBytes)});}},
  {id:'derivatives',script:'collect_derivatives.cjs',files:['data/derivatives-snapshot.json'],timeout:900000,validate(){require('./derivatives-core.js').validateSnapshot(json(this.files[0]));}}
 ];
 function backup(files,root=ROOT){return new Map(files.map(f=>{const p=path.join(root,f);return [f,fs.existsSync(p)?fs.readFileSync(p):null];}));}

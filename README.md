@@ -1,10 +1,20 @@
-# Flow Research — Market Observatory v0.9.3
+# Flow Research — Market Observatory v0.9.4
 
 Public site: https://phuongdinh92.github.io/flow-research/
 
 A public, read-only crypto research terminal that places market context, aggressor order flow, actual account balances, receipt-checked DEX acquisitions and an exploratory event study in one application. Each layer keeps its own identity, units, timestamps and coverage. The application does not identify beneficial owners, execute trades or claim a proven predictive edge.
 
 The default token terminal covers the 511-pair Binance spot/USDT research archive; the default explicit asset-class filter leaves 438 instruments. Aggregated USD markets, other venues, native HBAR account history, TON observations and Hyperliquid contracts remain separate datasets. A matching ticker never establishes a common token contract.
+
+## Live observations in v0.9.4
+
+When the page is open, the official Binance market-data-only `!miniTicker@arr` stream delivers changed-market rolling-24-hour observations nominally every second. Only validated active Spot/USDT instruments from the latest successful exchangeInfo read are accepted. The fallback registry remains source-dated. Each symbol keeps its event and receive time; five-second stale/disconnected rows leave live charts. Event time is ticker-generation time, not last-trade time. Other venues, the global USD catalog, closed candles and wallet history keep independent timestamps. This browser stream does not repair the blocked background collector or establish full-market wallet coverage.
+
+The selected Binance token also has an `aggTrade` observation window with exact decimal quote sums and net aggressor volume by price range. It begins when observed, retains at most 30 minutes / 10,000 trades, records connection gaps and never claims complete 1D/7D/30D history. Market buyer/seller initiation does not identify a beneficial owner.
+
+Sector rankings now require each provider observation to have been within 15 minutes of its own receipt in captured mode, or within 15 minutes of now in current mode. Three already-old category observations are excluded and remain inspectable. Circulating market-cap change remains different from A1's documented FDV and from net new money.
+
+The added inventory reconciliation independently replays retained receipts and balance states, then publishes exact observed inflow/outflow and unexplained net changes per address/token. Every one of the seven positions has unexplained change; no complete transfer ledger, whale identity, confirmed retention or holder cost basis is claimed. Browser transport binds the report to the chain snapshot's decoded SHA and recomputes the report before display. Raw-source replay is an offline audit.
 
 ## Implemented views
 
@@ -18,7 +28,7 @@ The default token terminal covers the 511-pair Binance spot/USDT research archiv
 
 ## Source scopes
 
-The following describes the v0.9.3 release observations. Published JSON manifests and source timestamps determine the current generation after refreshes; counts from different rows must not be added together.
+The following describes the v0.9.4 release observations. Published JSON manifests and source timestamps determine the current generation after refreshes; counts from different rows must not be added together.
 
 | Dataset | Release coverage | Interpretation and limits |
 | --- | --- | --- |
@@ -96,6 +106,7 @@ node refresh_data.cjs hedera-holders ton-holders dex-acquisition derivatives
 | `hedera-holders` | `collect_holder_history.cjs` |
 | `ton-holders` | `collect_holders.cjs` |
 | `dex-acquisition` | `collect_chain_ledger.cjs` |
+| `inventory-reconciliation` | `collect_inventory_ledger.cjs` — offline retained-source replay |
 | `derivatives` | `collect_derivatives.cjs` |
 
 The pipeline validates each job's outputs and restores that job's previous published files byte-for-byte on failure. The event study must match the source archive hash and cutoff. `data/collection-status.json` records the attempted jobs, outcomes and file hashes. Retaining old data does not reset its original observation time. Provider restrictions halt the affected collector without access-control workarounds.

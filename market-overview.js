@@ -74,6 +74,26 @@ function parseCategories(raw,{fetchedAt=Date.now(),now=Date.now()}={}){
  for(const r of raw)try{if(!r||typeof r.id!=='string'||!r.id||typeof r.name!=='string'||!r.name||seen.has(r.id))throw Error('Định danh nhóm trùng hoặc thiếu');seen.add(r.id);const updatedAt=Date.parse(r.updated_at);if(!finite(updatedAt)||updatedAt>now+60000)throw Error('Thời điểm nguồn không hợp lệ');for(const k of ['market_cap','volume_24h'])if(!finite(r[k])||r[k]<0)throw Error('Thiếu vốn hóa/volume');if(!finite(r.market_cap_change_24h)||r.market_cap_change_24h< -100)throw Error('Thiếu biến động vốn hóa');if(!Array.isArray(r.top_3_coins_id)||r.top_3_coins_id.some(id=>typeof id!=='string'||!id))throw Error('Thiếu định danh tài sản đại diện');rows.push({id:r.id,name:r.name,marketCapUsd:r.market_cap,marketCapChange24hPct:r.market_cap_change_24h,volume24hUsd:r.volume_24h,topCoinIds:[...new Set(r.top_3_coins_id)].slice(0,3),providerUpdatedAt:updatedAt,fetchedAt});}catch(e){errors.push({id:r?.id??null,message:e.message});}
  return {rows,errors,inputCount:raw.length,fetchedAt};
 }
+const CATEGORY_FRESHNESS_REASONS=Object.freeze({missing_source_time:'Thiếu thời điểm cập nhật của nguồn',missing_capture_time:'Thiếu thời điểm nhận dữ liệu',source_in_future:'Thời điểm nguồn vượt quá sai số đồng hồ 60 giây',stale_at_capture:'Nguồn đã cũ quá 15 phút ngay lúc nhận',stale_now:'Nguồn không được cập nhật trong 15 phút hiện tại'});
+/* A recently downloaded file cannot renew the provider's observation. Keep old
+   observations for inspection, but never mix them into a fresh-sector ranking. */
+function selectCategories(rows,{query='',sort='marketcap',limit=18,freshness='captured',now=Date.now()}={}){
+ if(!Array.isArray(rows)||!['captured','current'].includes(freshness)||!finite(now))throw Error('Phạm vi thời điểm nhóm ngành không hợp lệ');
+ const sorts={marketcap:(a,b)=>b.marketCapUsd-a.marketCapUsd,gainers:(a,b)=>b.marketCapChange24hPct-a.marketCapChange24hPct,losers:(a,b)=>a.marketCapChange24hPct-b.marketCapChange24hPct};if(!sorts[sort])throw Error('Thứ tự nhóm ngành không hợp lệ');
+ const q=query.trim().toLowerCase(),matching=rows.filter(r=>r&&(!q||[r.name,r.id].some(v=>String(v).toLowerCase().includes(q)))),eligible=[],excluded=[],reasons={};
+ for(const row of matching){
+  let reason=null;
+  if(!finite(row.providerUpdatedAt))reason='missing_source_time';
+  else if(!finite(row.fetchedAt))reason='missing_capture_time';
+  else if(row.providerUpdatedAt>row.fetchedAt+60000||(freshness==='current'&&row.providerUpdatedAt>now+60000))reason='source_in_future';
+  else if(row.fetchedAt-row.providerUpdatedAt>TTL)reason='stale_at_capture';
+  else if(freshness==='current'&&now-row.providerUpdatedAt>TTL)reason='stale_now';
+  if(reason){excluded.push({row,reason});reasons[reason]=(reasons[reason]||0)+1;}else eligible.push(row);
+ }
+ eligible.sort((a,b)=>sorts[sort](a,b)||a.id.localeCompare(b.id));
+ const selected=eligible.slice(0,limit==='all'?eligible.length:Math.max(1,Math.floor(Number(limit)||18)));
+ return {rows:selected,allRows:eligible,matching:matching.length,available:eligible.length,excluded,reasons,freshness};
+}
 function validateCategories(raw){if(!raw||raw.schemaVersion!==1||raw.provider!=='CoinGecko'||raw.currency!=='USD'||!finite(raw.generatedAt)||!Array.isArray(raw.rows)||!raw.source||typeof raw.source.url!=='string'||!/^https:\/\/api\.coingecko\.com\/api\/v3\/coins\/categories\?/.test(raw.source.url)||!Number.isInteger(raw.source.inputCount)||raw.source.inputCount<raw.rows.length||!/^[a-f0-9]{64}$/.test(raw.source.sha256))throw Error('Bản nhóm ngành không hợp lệ');const seen=new Set();for(const r of raw.rows){if(typeof r.id!=='string'||!r.id||seen.has(r.id)||typeof r.name!=='string'||!r.name)throw Error('Nhóm ngành thiếu/trùng định danh');seen.add(r.id);if(!finite(r.marketCapUsd)||r.marketCapUsd<0||!finite(r.volume24hUsd)||r.volume24hUsd<0||!finite(r.marketCapChange24hPct)||r.marketCapChange24hPct< -100||!finite(r.providerUpdatedAt)||!finite(r.fetchedAt)||r.providerUpdatedAt>r.fetchedAt+60000||!Array.isArray(r.topCoinIds)||r.topCoinIds.some(id=>typeof id!=='string'||!id))throw Error('Số liệu nhóm ngành không hợp lệ');}return raw;}
- return {TTL,MAX_SKEW,PERIODS,periodInfo,selectGlobal,pageRows,selectCatalog,selectVenue,movers,countertrend,bubbleGrid,render,parseCategories,validateCategories,esc,pct,human};
+ return {TTL,MAX_SKEW,PERIODS,CATEGORY_FRESHNESS_REASONS,periodInfo,selectGlobal,pageRows,selectCatalog,selectVenue,movers,countertrend,bubbleGrid,render,parseCategories,selectCategories,validateCategories,esc,pct,human};
 });
