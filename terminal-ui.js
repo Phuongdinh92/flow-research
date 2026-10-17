@@ -253,9 +253,14 @@
       const labels={connecting:'Đang mở luồng nến Binance',waiting:'Đã kết nối, chờ kline đầu tiên',disconnected:'Luồng nến đã ngắt, đang chờ kết nối lại',paused:'Luồng nến tạm dừng khi rời biểu đồ'};
       return session+(labels[status.state]||'Chờ nến trực tiếp của cặp đang chọn')+'. Nến ngày UTC mới chỉ hiện khi nhận được OHLC gốc; không suy ra từ ticker 24H.';
     }
+    function paintTokenPrice(projection){
+      const bar=projection.appended?projection.bar:projection.series?.at(-1)?.sourceSessionClosed?projection.series.at(-1):null;
+      const value=$('terminal-headline-price'),clock=$('terminal-headline-clock');if(!bar||!value||!clock)return;
+      value.textContent=fmt(bar.close,10);clock.textContent='Kline ngày Binance · sự kiện '+stamp(bar.eventTime);
+    }
     function paintCandle(){
       if(state.mode!=='price'||state.interval!=='1d'||state.priceHistoryKey!==state.key)return;
-      const projection=candleProjection();V.updateDaily?.($('terminal-price-body'),projection.series);
+      const projection=candleProjection();V.updateDaily?.($('terminal-price-body'),projection.series);paintTokenPrice(projection);
       const caption=$('terminal-candle-status');if(caption)caption.textContent=candleStatus(projection);
     }
     function syncCandle(h){
@@ -270,7 +275,7 @@
     host.addEventListener('click',e=>{const paging=e.target.closest('[data-terminal-flow-page]');if(paging){state.flowPage=Math.max(1,state.flowPage+(paging.dataset.terminalFlowPage==='next'?1:-1));renderFlow();return;}if(e.target.closest('[data-terminal-flow-toggle]')){state.flowPaused=!state.flowPaused;syncFlow(history());}});
 
     function render(){if(!state.data)return;const h=history(),a=analysis();if(!h||!a)return;let intel=null;try{intel=I?.analyze(h,{now:Date.now()});}catch(e){state.errors.intelligence=e.message;}
-      $('terminal-token-head').innerHTML='<div class="terminal-token-heading"><div><span class="terminal-token-mark">'+esc(a.base.slice(0,3))+'</span><div><h3>'+esc(a.base)+' <small>/ USDT</small></h3><p>Binance spot · '+esc(a.key)+'</p></div></div><div class="terminal-token-price"><strong>'+fmt(a.metrics.close,8)+' <small>USDT</small></strong><span class="'+(a.metrics.return7<0?'negative':'positive')+'">7D '+pct(a.metrics.return7)+'</span><small>Nến cuối '+day(a.metrics.end)+' UTC</small></div></div>';
+      $('terminal-token-head').innerHTML='<div class="terminal-token-heading"><div><span class="terminal-token-mark">'+esc(a.base.slice(0,3))+'</span><div><h3>'+esc(a.base)+' <small>/ USDT</small></h3><p>Binance spot · '+esc(a.key)+'</p></div></div><div class="terminal-token-price"><strong><span id="terminal-headline-price">'+fmt(a.metrics.close,8)+'</span> <small>USDT</small></strong><span class="'+(a.metrics.return7<0?'negative':'positive')+'">7D nến đã đóng '+pct(a.metrics.return7)+'</span><small id="terminal-headline-clock">Giá đóng '+day(a.metrics.end)+' UTC</small></div></div>';
       $('terminal-diagnosis').innerHTML=diagnosis(a,intel);
       const holderContext=HOLDER_CONTEXT[a.key];const hasHolder=holderContext==='hedera-hbar'&&!!state.holderHistory||['not','dogs'].includes(holderContext)&&!!state.holders;
       $('terminal-ladder').innerHTML=evidenceLadder({history:h,holder:hasHolder});
@@ -284,7 +289,7 @@
       const native=state.costReference&&G.FlowCostReference?.findAsset(state.costReference,a.base.toLowerCase())||null;
       if(state.mode==='network'&&!native)state.mode='price';
       state.priceClosedSeries=state.mode==='price'&&state.interval==='1d'?series:[];state.priceHistoryKey=h.key;
-      const projection=candleProjection();if(state.mode==='price'&&state.interval==='1d')series=projection.series;
+      const projection=candleProjection();if(state.mode==='price'&&state.interval==='1d'){series=projection.series;paintTokenPrice(projection);}
       let chart;
       if(state.mode==='network')chart=G.FlowCostReferenceView?.render(native,{windowDays:state.window,width:1100,showEma50:state.showEma50,showEma200:state.showEma200,showRealized:state.showRealized})||empty('Chưa nạp bộ vẽ giá vốn tham chiếu');
       else if(['price','delta','cvd'].includes(state.mode))chart=V.daily(series,{mode:state.mode,interval:state.interval,width:Math.max(360,$('terminal-price-body').clientWidth||1000),showSma20:false,showEma50:state.showEma50,showEma200:state.showEma200});
