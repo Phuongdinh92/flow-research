@@ -28,6 +28,14 @@ test('line chart preserves null gaps instead of connecting through missing balan
  const path=html.match(/class="terminal-track track-0" d="([^"]*)"/)[1];assert.equal((path.match(/M/g)||[]).length,2);assert.equal((html.match(/data-terminal-index/g)||[]).length,2);assert.doesNotMatch(html,/NaN|Infinity/);
  assert.match(T.lineChart([{time:1,x:null}],[{key:'x',label:'X'}]),/Chưa có chuỗi/);
 });
+test('holder chart breaks the unobserved 90D-to-30D interval without inventing observations',()=>{
+ const dayMs=86400000,origin=Date.UTC(2026,9,17),rows=[{time:origin-90*dayMs,balance:100},{time:origin-30*dayMs,balance:120},{time:origin-29*dayMs,balance:125}];
+ const html=T.lineChart(rows,[{key:'balance',label:'HBAR'}],{unit:'HBAR',maxGapMs:1.5*dayMs}),path=html.match(/class="terminal-track track-0" d="([^"]*)"/)[1];
+ assert.equal((path.match(/M/g)||[]).length,2);assert.equal((path.match(/L/g)||[]).length,1);assert.equal((html.match(/data-terminal-index/g)||[]).length,3);
+ const coordinates=[...path.matchAll(/[ML]([0-9.]+),/g)].map(m=>Number(m[1]));assert.ok(coordinates[1]-coordinates[0]>50*(coordinates[2]-coordinates[1]),'Real 60-day spacing must remain on time axis');
+ const weekly=T.lineChart([{time:origin-14*dayMs,x:1},{time:origin-7*dayMs,x:2},{time:origin,x:3}],[{key:'x',label:'Funding tuần'}]);
+ const weeklyPath=weekly.match(/class="terminal-track track-0" d="([^"]*)"/)[1];assert.equal((weeklyPath.match(/M/g)||[]).length,1);assert.equal((weeklyPath.match(/L/g)||[]).length,2);
+});
 test('chart observations expose keyboard and pointer readouts with actual units',()=>{
  const html=T.lineChart([{time:Date.UTC(2026,9,1),x:.25}],[{key:'x',label:'Funding'}],{unit:'% / giờ'});
  assert.match(html,/tabindex="0"/);assert.match(html,/data-terminal-tip=/);assert.match(html,/% \/ giờ/);
