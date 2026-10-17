@@ -1,4 +1,4 @@
-# Flow Research — Market Observatory v0.9.4
+# Flow Research — Market Observatory v0.9.5
 
 Public site: https://phuongdinh92.github.io/flow-research/
 
@@ -6,7 +6,20 @@ A public, read-only crypto research terminal that places market context, aggress
 
 The default token terminal covers the 511-pair Binance spot/USDT research archive; the default explicit asset-class filter leaves 438 instruments. Aggregated USD markets, other venues, native HBAR account history, TON observations and Hyperliquid contracts remain separate datasets. A matching ticker never establishes a common token contract.
 
-## Live observations in v0.9.4
+
+## Two primary workspaces in v0.9.5
+
+The default price view now puts candles and price levels on a right USD/USDT axis, with source-specific latest labels, separate volume, focus/hover crosshair, zoom and pan. EMA50 is lime and EMA200 pink. The native-network reference view keeps Coin Metrics daily USD Price, derived Realized, EMA50 and EMA200 on one source/unit/time scale; it never converts daily reference price samples into invented OHLC candles. `RealizedPriceUSD = PriceUSD / CapMVRVCur` follows the provider's capitalization identities. Exact decimal source inputs and a 24-decimal half-even quotient are retained. This is a network valuation proxy, not a confirmed investor purchase cost or A1 reproduction. The four remaining A1 Balance/Delta/Undervalue/Diamond bands stay explicitly unavailable; no multipliers are guessed. Coin Metrics community data is attributed and limited to noncommercial research under CC BY-NC 4.0. Account/private-supply valuation follows the provider's own methodology.
+
+The main Altcoin map uses a separately identified CoinLore full-catalog capture, with source-response and capture times rather than invented per-asset last-trade times. A public API capture is not certification of every token on every blockchain. Unknown price, supply or volume stays missing; unquoted catalog assets remain searchable. Ranked pagination reaches all eligible priced assets; 150/200 is a page size, never the universe count. CoinLore logos are accepted only from exact-ID metadata responses and retained provenance. Glowing circle area follows `1 + min(abs(returnPercent), 50)` by default; the floor is explicit and position has no economic meaning.
+
+CoinLore browser collection performs the documented full-catalog paginated scan at no more than one outstanding request and at least 1.1 seconds between requests. It only publishes an atomically complete unchanged-membership catalog, records per-ID outcomes and source SHA-256, and retains the prior snapshot on errors. It pauses when the map/source is hidden, repeats after ten active minutes, and stops after the first HTTP/CORS/schema failure without route switching. The browser path still depends on the provider allowing browser requests.
+
+Venue views stay separate. Binance's changed-symbol miniTicker stream covers its qualified Spot/USDT registry. Gate subscribes to explicit registered pairs in serial batches of 50 with acknowledged subscriptions and at least a one-second interval. Bitget keeps one socket and at most 49 currently selected pairs, explicitly below its documented stability recommendation; the rest retain their original saved timestamps. Bitget's reported `price24hPcnt` is preserved as a fraction and discrepancies with its own returned open price are flagged rather than silently recomputed. WhiteBIT remains a saved source. All streaming rows have a five-second source-event freshness window; source-generation time is not last-trade time.
+
+References: [CoinLore API](https://www.coinlore.com/cryptocurrency-data-api), [Coin Metrics capitalization methods](https://gitbook-docs.coinmetrics.io/network-data/network-data-overview/market/market-capitalization), [Gate Spot WebSocket](https://www.gate.com/docs/developers/apiv4/ws/en/), [Bitget UTA quick start](https://www.bitget.com/docs/uta/quick-start).
+
+## Live observations introduced in v0.9.4
 
 When the page is open, the official Binance market-data-only `!miniTicker@arr` stream delivers changed-market rolling-24-hour observations nominally every second. Only validated active Spot/USDT instruments from the latest successful exchangeInfo read are accepted. The fallback registry remains source-dated. Each symbol keeps its event and receive time; five-second stale/disconnected rows leave live charts. Event time is ticker-generation time, not last-trade time. Other venues, the global USD catalog, closed candles and wallet history keep independent timestamps. This browser stream does not repair the blocked background collector or establish full-market wallet coverage.
 
@@ -149,3 +162,5 @@ No authenticated private research backend, credentials, portfolio or trading ope
 - https://docs.coingecko.com/reference/pool-trades-contract-address
 - https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint
 - https://docs.a1radar.com/vi/features/accumulation-strength-index
+
+The decoded `data/coinlore-market.json` is a local collector output; the public repository distributes its exact bytes as `coinlore-market.json.gz` plus the SHA-256 manifest. The browser validates and decompresses that package, without a raw-JSON fallback. The decoded dataset can be reproduced with Node `zlib.gunzipSync` or `gunzip`.

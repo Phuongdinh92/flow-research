@@ -8,6 +8,8 @@ const ROOT=__dirname;
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const json=name=>JSON.parse(fs.readFileSync(path.join(ROOT,name),'utf8'));
 const jobs=[
+ {id:'coinlore-market',script:'collect_coinlore.cjs',files:['data/coinlore-market.json'],timeout:1800000,validate(){const s=require('./coinlore-core.js').validateSnapshot(json(this.files[0]));if(!s.coverage.complete)throw Error('CoinLore source catalog incomplete; previous generation retained');}},
+ {id:'network-cost-reference',script:'collect_cost_reference.cjs',files:['data/cost-reference.json'],timeout:180000,validate(){require('./cost-reference.js').validateSnapshot(json(this.files[0]));}},
  {id:'venue-prices',script:'collect_public.cjs',files:['data/market-snapshot.json'],timeout:180000,validate(){require('./market-ui.js').validateSnapshot(json(this.files[0]));}},
  {id:'global-markets',script:'collect_market_overview.cjs',files:['data/ecosystem-snapshot.json','data/market-categories.json','data/market-coverage.json'],timeout:2400000,validate(){const E=require('./ecosystem.js'),ledgerBytes=fs.readFileSync(path.join(ROOT,this.files[2]));E.validateMarketCoveragePair(json(this.files[0]),JSON.parse(ledgerBytes),{coverageSha256:sha(ledgerBytes)});require('./market-overview.js').validateCategories(json(this.files[1]));}},
  {id:'daily-research',script:'collect_signals.cjs',files:['data/research-snapshot.json.gz','data/research-manifest.json','data/research-snapshot.json'],timeout:900000,validate(){

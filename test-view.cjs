@@ -188,5 +188,45 @@ test('EMA200 uses the true price axis, hides unseeded values and breaks across m
   assert(!V.daily(series, { mode: 'cvd' }).includes('chart-ema200')); finiteSVG(svg);
 });
 
+test('professional price layout uses right price axis, actual last-value boxes and separate volume pane', () => {
+  const series = bars.slice(0, 12).map(b => ({ ...b, sma20: b.close, ema50: b.close * .9, ema200: b.close * .8 }));
+  const svg = V.daily(series, { width: 1100, showSma20: false });
+  assert(svg.includes('viewBox="0 0 1100 620"')); assert(svg.includes('chart-price-pro'));
+  assert(!svg.includes('chart-sma20')); assert(svg.includes('chart-ema50')); assert(svg.includes('chart-ema200'));
+  const right = Number(svg.match(/data-plot-right="([\d.]+)"/)[1]);
+  for (const m of svg.matchAll(/class="chart-tick chart-right-axis" x="([\d.]+)"/g)) assert(Number(m[1]) > right);
+  assert(svg.includes('stroke="#b8e44f"')); assert(svg.includes('stroke="#df79b6"'));
+  assert(svg.includes('EMA50: ' + series.at(-1).ema50 + ' USDT')); assert(svg.includes('EMA200: ' + series.at(-1).ema200 + ' USDT'));
+  assert.equal((svg.match(/class="chart-end-label"/g) || []).length, 2);
+  assert.equal((svg.match(/data-price-sample=/g) || []).length, series.length); finiteSVG(svg);
+});
+test('externally verified tracks share the true candle scale and break at missing observations', () => {
+  const series = bars.slice(0, 4), points = series.map((b, i) => ({ time: b.end, value: [b.close, null, b.close, b.close][i] }));
+  const svg = V.daily(series, { width: 960, priceTracks: [{ id: 'realized', label: 'Realized', color: '#2587ed', verified: true, points }] });
+  const path = svg.match(/<path class="chart-level-realized" d="([^"]+)"/)[1];
+  assert.equal((path.match(/M/g) || []).length, 2); assert.equal((path.match(/L/g) || []).length, 1);
+  const candle = svg.match(/class="chart-candle-body" x="[\d.-]+" y="([\d.-]+)"/);
+  const sample = svg.match(/class="chart-level-realized chart-indicator-sample" cx="[\d.-]+" cy="([\d.-]+)"/);
+  assert.equal(candle[1], sample[1]); assert(svg.includes('Realized: ' + series.at(-1).close + ' USDT')); finiteSVG(svg);
+});
+test('unverified, malformed, unmatched or ambiguous track inputs never produce proxy curves', () => {
+  const series = bars.slice(0, 3), candidate = { id: 'balance', label: 'Balance', color: '#9873ed', verified: true, points: series.map(b => ({ time: b.time, value: b.close })) };
+  for (const track of [{ ...candidate, verified: false }, { ...candidate, color: 'url(javascript:alert(1))' },
+    { ...candidate, points: [candidate.points[0], candidate.points[0]] }, { ...candidate, points: [{ time: series[0].time - DAY, value: 5 }] },
+    { ...candidate, points: [{ time: series[0].time, value: -1 }] }]) {
+    const svg = V.daily(series, { priceTracks: [track] }); assert(!svg.includes('chart-level-balance')); finiteSVG(svg);
+  }
+  const escaped = V.daily(series, { priceTracks: [{ ...candidate, label: '<script>danger</script>' }] });
+  assert(escaped.includes('&lt;script&gt;danger&lt;/script&gt;')); finiteSVG(escaped);
+  const missing = V.daily(series, { priceTracks: [{ ...candidate, points: [{ time: series[0].time, value: 10 }] }] });
+  assert(missing.includes('chart-level-balance')); assert(!missing.includes('class="chart-end-label"'));
+});
+test('latest price labels retain nonzero tiny values and interaction binding is optional in Node', () => {
+  const tiny = bars.slice(0, 3).map(b => ({ ...b, open: 1e-12, high: 3e-12, low: 1e-13, close: 2e-12 }));
+  const svg = V.daily(tiny, { width: 240 });
+  assert(svg.includes('2.00e-12')); assert(svg.includes('chart-crosshair')); finiteSVG(svg);
+  assert.equal(V.bindInteraction(null), undefined);
+});
+
 for (const t of tests) { t.run(); console.log('ok - ' + t.name); }
 console.log(tests.length + ' meaningful chart view tests passed');

@@ -28,3 +28,5 @@ __pycache__/
 
 # Local decoded audit copy; the same validated candles ship in gzip form.
 data/research-snapshot.json
+# Full CoinLore catalog is distributed losslessly through verified gzip.
+data/coinlore-market.json
