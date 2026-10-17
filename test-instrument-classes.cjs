@@ -14,7 +14,7 @@ test('the exact 68 announcement-listed Binance securities carry their primary so
  assert.equal(STOCKS.length,68);assert.equal(new Set(STOCKS).size,68);
  for(const base of STOCKS){const c=Classes.classify('binance',base+'USDT');assert.equal(c.kind,'tokenized_security',base);assert.equal(c.excludedByDefault,true,base);assert.equal(c.sourceUrl,Classes.stockSource);assert.match(c.label,/bStocks/);}
  const classified=dataset.universe.instruments.filter(r=>Classes.classify('binance',r.instrument).kind==='tokenized_security');
- assert.deepEqual(classified.map(r=>r.base).sort(),[...STOCKS].sort());
+ assert.ok(classified.every(r=>STOCKS.includes(r.base))); // A future delisting must not break the scheduled refresh.
 });
 test('four verified USD-pegged assets and EUR have exact distinct classifications',()=>{
  for(const base of ['XUSD','USDC','FDUSD','USDE']){const c=Classes.classify('binance',base+'USDT');assert.equal(c.kind,'stablecoin');assert.equal(c.excludedByDefault,true);assert.equal(new URL(c.sourceUrl).protocol,'https:');}
@@ -38,22 +38,22 @@ test('inherited object properties cannot become verified stablecoin identities',
   const c=Classes.classify('binance',instrument);assert.equal(c.kind,'unclassified',instrument);assert.equal(c.excludedByDefault,false);assert.equal(c.sourceUrl,null);
  }
 });
-test('current research retains all 511 source histories and classifies exactly 73 known exclusions',()=>{
- assert.equal(result.errors.length,0);assert.equal(analyses.length,511);
+test('current research retains the entire source universe and only explicitly documented exclusions',()=>{
+ assert.equal(result.errors.length,0);assert.equal(analyses.length,manifest.sourceCoverage.completed);
  const excluded=analyses.filter(a=>a.instrumentClass.excludedByDefault),counts={};
  for(const a of excluded)counts[a.instrumentClass.kind]=(counts[a.instrumentClass.kind]||0)+1;
- assert.equal(excluded.length,73);assert.deepEqual(counts,{stablecoin:4,fiat:1,tokenized_security:68});
- assert.equal(Object.keys(dataset.histories).length,511);
+ assert.ok(excluded.length>0);assert.ok(excluded.every(a=>['stablecoin','fiat','tokenized_security'].includes(a.instrumentClass.kind)));
+ assert.equal(Object.keys(dataset.histories).length,manifest.sourceCoverage.completed);
  for(const a of analyses)assert.ok(dataset.histories[a.key],'classification never deletes retained evidence');
 });
 test('research filter excludes known asset types only when selected and preserves unclassified candidates',()=>{
  const full=R.selectRows(analyses,{scope:'all',excludeKnown:false}),filtered=R.selectRows(analyses,{scope:'all',excludeKnown:true});
- assert.equal(full.count,511);assert.equal(filtered.count,438);assert.equal(new Set(full.rows.map(a=>a.key)).size,511);
- assert.ok(filtered.rows.every(a=>a.instrumentClass.kind==='unclassified'));assert.equal(R.selectRows(analyses,{scope:'eligible',excludeKnown:false}).count,488);
- assert.equal(R.selectRows(analyses,{scope:'eligible',excludeKnown:true}).count,415);
+ assert.equal(full.count,analyses.length);assert.equal(filtered.count,analyses.filter(a=>!a.instrumentClass.excludedByDefault).length);assert.equal(new Set(full.rows.map(a=>a.key)).size,analyses.length);
+ assert.ok(filtered.rows.every(a=>a.instrumentClass.kind==='unclassified'));assert.equal(R.selectRows(analyses,{scope:'eligible',excludeKnown:false}).count,analyses.filter(a=>a.candidate!==null).length);
+ assert.equal(R.selectRows(analyses,{scope:'eligible',excludeKnown:true}).count,filtered.rows.filter(a=>a.candidate!==null).length);
  const candidates=R.selectRows(analyses,{scope:'candidate',excludeKnown:true});
- assert.equal(candidates.count,4);assert.deepEqual(candidates.rows.map(a=>a.base).sort(),['AT','NXPC','WCT','WOO']);
- assert.equal(R.selectRows(analyses,{scope:'candidate',excludeKnown:false}).count,23);
+ assert.deepEqual(new Set(candidates.rows.map(a=>a.key)),new Set(filtered.rows.filter(a=>a.candidate===true).map(a=>a.key)));
+ assert.equal(R.selectRows(analyses,{scope:'candidate',excludeKnown:false}).count,analyses.filter(a=>a.candidate===true).length);
  const priorKeys=analyses.map(a=>a.key);R.selectRows(analyses,{scope:'all',excludeKnown:true});assert.deepEqual(analyses.map(a=>a.key),priorKeys,'UI selection does not mutate source analyses');
 });
 test('known-type filter composes with search, eligibility and pagination instead of hiding the original universe',()=>{

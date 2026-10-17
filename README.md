@@ -1,122 +1,116 @@
-# Flow Research — Market Observatory v0.8
+# Flow Research — Market Observatory v0.9
 
 Public site: https://phuongdinh92.github.io/flow-research/
 
-This version makes a transparent descriptive buying-pressure screener the first view, adds 401-day source histories, EMA200 and up to 200 bubbles. It retains the public on-chain observations. It shows current TON holder distributions, changes between actual short-interval observations and a sampled Ethereum DEX ledger with balances at one finalized block. Beneficial-owner attribution, proprietary A1Radar models, strategy backtests and investment rankings are not implemented.
+A public, read-only crypto research terminal that places market context, aggressor order flow, actual account balances, receipt-checked DEX acquisitions and an exploratory event study in one application. Each layer keeps its own identity, units, timestamps and coverage. The application does not identify beneficial owners, execute trades or claim a proven predictive edge.
 
-## Separate data scopes
+The default token terminal covers the 511-pair Binance spot/USDT research archive; the default explicit asset-class filter leaves 438 instruments. Aggregated USD markets, other venues, native HBAR account history, TON observations and Hyperliquid contracts remain separate datasets. A matching ticker never establishes a common token contract.
 
-| Layer | Verified saved coverage on 2026-10-16 | Meaning |
+## Implemented views
+
+- **Token terminal:** search the Binance archive; inspect price, volume, calendar candles, SMA20/EMA50/EMA200, weighted taker buy share, delta, CVD, RSI, price position, observed drawdown and public descriptive conditions. Source-specific HBAR, Ethereum acquisition and derivatives evidence appears only where the corresponding data exists.
+- **Market overview:** CoinGecko USD bubbles, columns, gainers/losers, same-source BTC countertrend and category aggregates; four distinct spot/USDT venue maps. Available return frames are 1H, 24H, 7D, 30D and 1Y when returned by CoinGecko. Venue ticker maps remain 24H. A missing 15-minute field is not approximated from another timeframe.
+- **Buying-pressure screen:** adjustable 7D/30D buy-share, non-overlapping relative-volume and 30D return conditions across the dated Binance universe. Matches describe trades; they do not identify accumulating whales.
+- **Holder history:** real HBAR historical custody balances, fixed account-rank cohorts, comparison intervals and optional exclusions based on officially documented Council/network accounts. TON retains exact top-account observations and comparisons between actual captures.
+- **Ethereum acquisition ledger:** selected UNI, LINK and AAVE purchases in three named Uniswap v3 pools, verified against transaction receipts and transfer routes, with fixed-block balances and 30 historical state checkpoints per selected address/token position.
+- **Derivatives context:** original Hyperliquid perpetual DEX metadata, mark/oracle prices, open interest, current funding and captured funding histories. This is not a liquidation heatmap or cross-venue positioning model.
+- **Historical event study:** all eligible selected condition onsets, including losing and pending outcomes, with 7D/30D results, BTC comparisons, matched same-date baselines and an explicit illustrative fee/slippage scenario.
+
+## Source scopes
+
+The following describes the v0.9 release observations. Published JSON manifests and source timestamps determine the current generation after refreshes; counts from different rows must not be added together.
+
+| Dataset | Release coverage | Interpretation and limits |
 | --- | --- | --- |
-| Venue spot/USDT | Binance 511, Bitget 504, Gate 2,052, WhiteBIT 328 | 3,395 venue/instrument rows, not 3,394 unique coins |
-| Aggregated USD markets | 999 unique CoinGecko asset IDs after removing one repeated ID across four current market-cap pages | Provider-aggregated prices and 24H/7D/30D changes; not independent wallet evidence |
-| Catalog | 22,307 CoinGecko identities | A catalog count, not a claim that every identity has current price or flow data |
-| Binance daily taker summary | 489 valid / 511 checked; 22 short-history exclusions | 31 continuous completed UTC days; weighted buy quote share and close-to-close changes |
-| Long-history research scanner | 511/511 current Binance spot/USDT pairs, 166,221 completed UTC candles; 354 full 401-day histories and 157 shorter | Dated current universe; 488 pairs have the 37-day inputs needed by the descriptive filter |
-| TON holder observations | Top 1,000 owner accounts each for STON, NOT and DOGS, multiple actual full captures, initially five minutes and later about 4h43m apart | Exact raw quantities, source-ranked cohorts; includes exchange/protocol custody accounts, not whale ownership |
-| Ethereum DEX evidence | 300 returned swaps, 177 senders, one WETH/USDC Uniswap v3 pool; 10 selected sender balances at finalized block 26,204,700 | A sample covering 10:01–11:22 UTC, with 197 swaps before the balance cutoff at 11:09:11 UTC |
-| Ecosystem context | 425 chain TVL rows, 209 chain stablecoin valuation rows; 3,244 global historical dates | DefiLlama TVL and USD stablecoin valuations, not net token purchases |
+| Binance daily archive | 511/511 current source instruments; completed UTC daily candles, requesting up to 401 days each | Current-listed universe, not historical membership or all exchanges. The default class filter removes 73 explicitly documented securities/stablecoin/fiat instruments; remaining instruments are not all independently classified. |
+| Venue spot/USDT prices | Binance, Bitget, Gate and WhiteBIT; valid/expected instrument counts shown separately | Each row is a venue/instrument identity, not a unique coin. Missing or stale tickers remain explicit. |
+| Aggregated USD markets | 1,000 distinct CoinGecko IDs across four market-cap pages; catalog observation contains 22,307 IDs | Prices and available provider return fields. Catalog membership does not establish current price, chain coverage or wallet evidence. |
+| Provider categories | 382 complete category observations from 774 returned records | 392 records lacked required change/timestamp data and were excluded. Categories overlap; representative coin IDs are not complete membership lists. Category market-cap change is not net buying. |
+| Native HBAR history | 30 requested daily observations plus 30D/90D anchors: 32 actual source snapshots | Fully paginated accounts at or above 1 million HBAR, then locally balance-ranked. Mirror Node states have 15-minute source granularity; exact state timestamps are retained. This is not the full holder population. |
+| TON holders | Top 1,000 accounts each for STON, NOT and DOGS across actual captures | Latest indexed custody balances, not one shared atomic block, beneficial owners or inferred daily history. |
+| Ethereum acquisition sample | 30 receipt-checked selected acquisitions across UNI/LINK/AAVE; four recipient contracts and seven address/token positions with 30 historical balance checkpoints | Largest estimated-USD acquisitions in each provider latest-trades sample. Size-biased and incomplete; no complete intervening Transfer ledger or verified whale identity. Checkpoints are spaced by 7,200 blocks and use actual timestamps, not exact daily trade totals. |
+| Hyperliquid perpetuals | 234 native metadata entries, 178 active; 32 contracts with 30-day funding histories | Original DEX only, including delisted metadata entries. Excludes HIP-3 DEXs, other venues and trader identities. Open interest is not net new money or a directional position count. |
+| Legacy WETH/USDC evidence | One pool, 300 returned swaps and selected sender balances at one finalized cutoff | Preserved as its own earlier sample in the wallet/DEX pane; not merged with the newer UNI/LINK/AAVE acquisition ledger. |
+| DeFi context | Source-dated chain TVL, circulating stablecoin USD valuations and historical valuations | Valuation changes may include issuance, redemption, prices, FX or depegs; they are not token purchases or verified capital inflows. |
 
-The provider global endpoint's active-asset/exchange counts and catalog count are distinct observations with different definitions and timestamps. Exact-name chain joins produce 452 records; this is not a certified count of distinct blockchains. Missing values remain null.
+No dataset claims complete coverage of all tokens, wallets, exchanges or chains. Aggregated USD volume is never added to venue USDT turnover. All modules distinguish missing values from numeric zero and source failures.
 
-No layer is presented as complete coverage of all exchanges, DEXs, chains, assets or wallets. Aggregated USD volume is kept separate from each venue's USDT quote turnover and is never added to it. Shared ticker names do not establish common contract identity.
+## Reading accumulation evidence
 
-## Data quality and access
+Taker buying shows which side initiated a match. Binance public market data does not disclose the buyer's account inventory or identity. A large address balance can belong to an exchange, protocol, bridge, treasury, router or multiple beneficial owners. Receiving tokens does not establish buying them.
 
-- `market.js` shares the same public parsers between browser and collector. Source metadata determines eligible active spot/USDT instruments; there is no 30-symbol shortlist.
-- Bitget explicitly classifies crypto products. The observed Binance/Gate/WhiteBIT registries do not establish underlying asset class; spot eligibility is not a crypto-only classifier. No speculative ticker suffix blacklist is used.
-- Gate supplies a response clock rather than an update timestamp for every instrument. WhiteBIT supplies receipt time and has no browser CORS permission. These limitations are labeled; a current response does not establish when an illiquid instrument last traded.
-- Browser scans read the three CORS-enabled venues. WhiteBIT remains a source-dated server snapshot; it is not counted as a successful browser API call.
-- Ticker/price observations older than 15 minutes are excluded from current maps. If every usable saved observation has aged out, a saved-time view is explicitly labeled historical. CoinGecko freshness uses each asset's own provider update time; ancient rows with apparently nonzero volume are not treated as current.
-- Failed source requests preserve prior data with its original dates and error. HTTP/HTML block responses never become market records. Zero, missing data, unsupported fields and source failures remain distinct.
-- Snapshot outputs include source URLs, receipt times and SHA-256 hashes of decoded response bodies. Raw audit receipts are retained outside the website source during collection; normalized outputs alone are not a fully replayable research archive.
+The Ethereum ledger checks the swap and the transaction's token-transfer route before associating an acquisition with its observed recipient. A recipient can still be a contract, intermediary or custodian. Before/after/finalized balances and historical checkpoints do not reveal every transfer between them. Retained purchased units therefore remain bounded rather than confirmed; a large ending balance alone never changes the label to “whale accumulation.”
 
-## Charts
+HBAR cohort comparisons keep the older rank-set membership fixed. Current official Council/network exclusions can be inspected and toggled; applying those labels to older observations is retrospective. Unclassified accounts may still be infrastructure or exchange custody. Accounts absent from a completely paginated minimum-balance universe receive justified balance bounds, not invented exact zero balances. TON accounts missing from a later top-1,000 page remain unknown.
 
-- Readable equal-size bubbles by default. Size has no volume/market-cap meaning in this mode. The venue map also offers exact area-proportional quote-turnover sizing. Selection, number shown and denominator are explicit.
-- CoinGecko maps switch between provider 24H, 7D and 30D returns. These rolling changes are distinct from calendar candle intervals.
-- Venue detail supports real daily, Monday-start weekly and calendar-month UTC candles, plus a separate quote-volume pane. Full daily history is aggregated first; partial boundary periods and missing-day periods are excluded. Complete periods overlapping the chosen 30/90/120/180/365-day window are shown intact.
-- Binance taker delta and CVD require actual buy quote volume. Bitget/Gate histories do not supply it; WhiteBIT daily history is unsupported. Missing taker values never become zero.
-- CVD resets at the beginning of the displayed series and becomes unknown after a gap. Aggressor imbalance is not cash deposited, wallet inventory or whale accumulation.
-- Optional SMA20 and SMA-seeded EMA50/EMA200 use all available daily history before display slicing. Week/month overlays sample the last daily value of the completed period. Gaps restart warmup. EMA200 is available only after 200 consecutive daily observations. Long detail requests ask for 401 completed days; Bitget pagination and provider shortages are explicit. These averages are not holder-cost SmartBands.
-- Global stablecoin history is USD valuation of circulating quantities across peg types. Changes may reflect issuance/redemption, valuation, FX or depeg effects. They are not labeled cash inflows into altcoins. TVL changes are not deposits minus withdrawals.
-- The evidence panel lists every A1 reference category, its actual implementation state, and missing inputs. TON cohorts now use actual source-ranked account balances; no simulated balances, owner clusters, whale signals or score axes are supplied.
+## Calculations and historical study
 
-## Independent research screen
+Daily measurements use completed UTC candles. Weighted taker buy share is total buy quote divided by total quote over the same window; delta is `2 × buy quote − total quote`. CVD resets at the displayed window's start and after missing history. Weekly candles start Monday UTC; monthly candles follow the actual calendar. Partial or gapped periods are excluded. SMA/EMA warmup uses the available daily history before display slicing and restarts after gaps.
 
-The default view is a dated Binance CEX filter, not an ASI replica or an identified-whale system. It uses the complete current source registry, including pairs with short histories; none are silently dropped from the coverage denominator. The collector checked the registry before and after reading all 511 instruments. Every returned candle was replayed against original source responses using Python Decimal; all 166,221 records reconciled. Current membership is not historical membership, so the archive is not a survivorship-free backtest dataset.
+The default descriptive pressure condition is `buyShare7 > 52%`, `buyShare30 > 50%`, `−30% ≤ return30 ≤ 15%` and `mean quote7 / mean quote of the immediately preceding 30 days ≥ 1.10`. These require 37 continuous completed days. EMA200 requires its own 200-day warmup and is not a prerequisite for measuring newer instruments.
 
-The actual descriptive inputs are quote-weighted taker buy shares over 7/30 completed UTC days, taker buy minus sell quote, 7-day average quote turnover divided by the immediately preceding 30-day average, and 30-day close return. The volume windows never overlap. At least 37 continuous days are needed for all filter inputs. EMA200 is optional and does not exclude newer assets from measurement. Missing/zero-denominator quantities stay null. Old histories cannot be current candidates. There is no probability score, proprietary A1 label or validated prediction claim.
+The event study uses condition **onsets**, excludes first-observable left-censored onsets, and imposes a 30-day per-instrument embargo. Signals use only the completed signal candle and earlier inputs. Entry is the following daily OPEN proxy; exit is the 7th/30th subsequent candle CLOSE. These are hypothetical execution prices, not observed fills. The illustrative cost scenario charges 10 basis points of fees plus 10 basis points of slippage on each side. Funding and borrowing are zero because this is a spot study.
 
-Visible user-adjustable default conditions are buyShare7 >52%, buyShare30 >50%, 30-day return between −30% and +15%, and volume ratio >=1.10. They are illustrative research conditions, not optimized strategy settings. At the saved cutoff, 488 pairs had the inputs and 23 matched these conditions across all instrument classes. The default view removes 73 explicitly classified bStocks/stablecoin/EUR instruments, leaving 415 eligible measurements and four matching native pairs: AT, NXPC, WCT and WOO. These matches are descriptive observations, not purchase recommendations or verified accumulation.
+BTC uses the same dates and cost scenario. The matched baseline uses other source instruments in the same signal-date trailing-volume quartile and the same 30D return range, with sufficient prior inputs. Results retain failures, pending horizons, unavailable controls, means, medians, drawdown and adverse daily lows. They do not establish causality, out-of-sample performance, statistical significance or a profitable strategy. The archive omits historical delistings and historical universe membership; the classifications were assembled at collection time. This is an exploratory retrospective study, not a fully point-in-time backtest.
 
-`instrument-classes.js` uses an explicit 68-symbol bStocks list from Binance's 2026-08-28 announcement, four documented USD-pegged assets (XUSD, USDC, FDUSD, USDE) and documented EUR fiat. It does not infer instrument class from a suffix or merge identities across venues. Remaining instruments stay **unclassified**, not certified crypto-only. The dated list may omit later products. Users can show the entire original registry. All normalized history and provenance remain in the archive even when a display filter hides an instrument.
+## Local startup and tests
 
-The long dataset is delivered as `research-snapshot.json.gz` plus `research-manifest.json`. The browser verifies byte lengths and both compressed/decoded SHA-256 hashes, validates source-pair URLs and counts, and renders nothing from invalid archives. Modern browser Compression Streams support is required. Summary analysis does not retain every derived series in memory; the selected pair is recomputed for detail. The chart supports 180/365-day views, calendar candles, daily SMA20/EMA50/EMA200, taker delta, window-reset CVD and rolling buy-share/relative-volume histories. No Realized/Balance/Delta/Undervalue/Diamond bands, holder-age costs, Strategic Capital, Shark/Whale Action or predictive backtest is claimed.
+Viewing the deployed site requires no installation, account or API key. For development, use Node.js 22+ and serve the checkout over HTTP; opening `index.html` as a `file:` URL will not provide normal fetch behavior. No npm dependencies are required for the Node collectors or checks. Python is optional for the simple server and the older independent verification tools.
 
-```text
-node collect_signals.cjs
+```sh
+cd flow-research
+python -m http.server 8080
 ```
 
-The collector preserves original receipts outside the checkout, paces public reads, halts on source restrictions without retrying, and emits the gzip plus manifest only when actual data is available. `data/research-snapshot.json` is an ignored local audit copy. There is no scheduled collection in this release. The reload button rereads the latest published archive; it does not launch 511 provider requests from the browser.
+Open `http://localhost:8080/` in a modern browser with Compression Streams support. The research archive is delivered as gzip plus a manifest; the browser checks compressed/decoded lengths and SHA-256 hashes before accepting its contents.
 
-## On-chain observations
-
-`holders.js` supports exactly three verified TON mainnet master contracts. The API metadata, symbol, decimals and whitelist status are cross-checked against those identities. Whitelist status identifies the supported token; it does not establish investment safety. All amounts stay integer strings and use BigInt for arithmetic. Owner accounts and their jetton-wallet contracts are distinct fields. Provider labels and wallet-interface flags are descriptive, not verified beneficial-owner identities.
-
-Distribution charts use the provider's reported total supply as denominator, not circulating supply. Top accounts include exchanges, DEX/protocol contracts, project custody and unclassified addresses; no whale classification or exclusion-adjusted circulating supply is asserted. TonAPI endpoints return latest indexed state during a per-token collection window, not one common block. Supply/holder metadata and the ranked page may be observed at slightly different instants.
-
-The snapshot retains both full top-1,000 observations for each token and an earlier STON top-100 observation. Comparison selects the oldest prior observation with the largest available coverage. Cohorts are fixed by the earlier ranks and joined by exact owner address; missing owners are not assigned zero. A complete cohort delta is null unless every expected anchor member is observed at both ends. Initial captures were about five minutes apart; a later real capture spans approximately 4h43m from the previous full observation. Charts state the exact chosen interval and retain null when an earlier cohort member is no longer in the observed top 1,000. This is an account balance change, not a purchase or a 24H/7D/30D history. For example, the DOGS observations include substantial changes in a provider-labelled Binance Hot Wallet; this cannot be called whale accumulation.
-
-Browser refresh reads only the selected TON token, with a module-wide lock and at least five seconds between unauthenticated requests. CORS was verified from the deployed origin. An error preserves the earlier observation and original time. New browser observations live only in that open page's memory; no persistent scheduled collection is enabled.
-
-`dex-evidence.js` verifies the exact Ethereum chain, pool, WETH and USDC contracts, side direction, source proof, raw token quantities and one fixed finalized block. Ten senders are selected by their largest USD-valued swap in the finalized portion of the returned sample, not by holdings. Sender summary statistics are recomputed from trades. `balanceOf` and `eth_getCode` are queried at that fixed block, and its hash is checked before/after collection. A checked sender is not necessarily a swap recipient or beneficial owner. The included real receipt demonstrates a 28.493604173305397647 WETH transfer to a different contract; its before/finalized balances do not prove retained purchases.
-
-GeckoTerminal returns at most the latest 300 pool swaps in a trailing 24-hour window; this particular sample covers only 81 minutes. The five-minute chart describes only returned swaps, including 103 after the balance cutoff. Sender-table net values include only the 197 swaps at or before the finalized block. USD figures are provider estimates, not settled-dollar amounts. This is neither all Ethereum activity nor a complete 24-hour ledger.
-
-Public receipt metadata includes URLs, capture times, request payloads where needed and response SHA-256. Raw collection receipts and independent replay reports are retained outside the website checkout during this work. The public normalized snapshots preserve exact token quantities, not an independently replayable full RPC archive.
-
-## Maintenance
-
-Website users need no Python, installation, API account or downloaded file.
-
-The current four-venue collector reuses the exact browser adapters:
-
-```text
-node collect_public.cjs
-```
-
-`collect_market.py` remains the earlier two-venue collector and its isolated validation fixtures; use `collect_public.cjs` for this release's full enabled venue set.
-
-The Binance history collector can resume verified same-UTC-day cached responses without changing their original receipt time:
-
-```text
-python -m pip install -r requirements-flow.txt
-python collect_flow.py
-```
-
-`FlowEcosystem.refresh(previousSnapshot)` refreshes four CoinGecko price pages and global statistics at an eight-second request gap. It stops on HTTP/CORS/rate-limit failures without retrying or replacing previous data. Catalog, TVL and stablecoin observations retain their original source times; assembly time does not make them newly fetched.
-
-The on-chain collectors use Node 20+ built-ins and keyless public endpoints:
-
-```text
-node collect_holders.cjs
-node collect_dex_evidence.cjs
-```
-
-They stop on source failures without evading provider restrictions. The DEX collector limits free RPC batches to three calls.
-
-No scheduled collector or trading operation is enabled. Nothing collects data while the browser is closed. No private strategy, credentials, portfolio, wallet labels or authenticated research backend is included. Browser-delivered files can be inspected.
-
-## Verification
-
-```text
-node --test test-market.cjs test-ui.cjs test-charts.cjs test-view.cjs test-ecosystem.cjs test-global-ui.cjs test-holders.cjs test-dex-evidence.cjs test-onchain-ui.cjs test-signal-core.cjs test-research-ui.cjs test-instrument-classes.cjs
+```sh
+node --test test-*.cjs
 python collect_market.py --self-test
 python -m unittest test_flow
 ```
 
-Checks cover source identity, units, partial failures, freshness, true calendar boundaries (including leap-year February), missing-day behavior, CVD reset, indicator warmup, USD-vs-USDT separation, exact area scaling and accessible rendering. All 489 Binance summaries and all 1,000 normalized USD market records from the earlier capture were independently reconciled against retained responses. Gate weekly/monthly aggregation was independently replayed with Python Decimal and calendar boundaries. All 3,000 latest TON account-token rows and six source hashes were replayed against retained raw responses. An independent Decimal replay reconciled all 300 DEX trades, 10 sender balance batches and 18 source hashes. Tests cover exact raw balance precision, missing-as-null cohort changes, fixed-block integrity, sender/recipient separation and observed-sample scope. Software checks do not establish prediction performance.
+The checks cover source identities, percent/quote units, completeness, freshness, failures, exact integer balances, receipt routing, fixed-block integrity, funding alignment, missing-as-null behavior, calendar boundaries, indicator warmup, chart scaling and historical-study selection/cost/baseline rules. Tests of software and source reconciliation do not establish prediction accuracy.
+
+## Refresh and automation
+
+The complete public refresh pipeline is:
+
+```sh
+node refresh_data.cjs
+```
+
+Run selected jobs by their explicit IDs when needed:
+
+```sh
+node refresh_data.cjs venue-prices global-markets daily-research event-study
+node refresh_data.cjs hedera-holders ton-holders dex-acquisition derivatives
+```
+
+| Job | Collector |
+| --- | --- |
+| `venue-prices` | `collect_public.cjs` |
+| `global-markets` | `collect_market_overview.cjs` |
+| `daily-research` | `collect_signals.cjs` |
+| `event-study` | `collect_intelligence.cjs` — derives from the validated archive |
+| `hedera-holders` | `collect_holder_history.cjs` |
+| `ton-holders` | `collect_holders.cjs` |
+| `dex-acquisition` | `collect_chain_ledger.cjs` |
+| `derivatives` | `collect_derivatives.cjs` |
+
+The pipeline validates each job's outputs and restores that job's previous published files byte-for-byte on failure. The event study must match the source archive hash and cutoff. `data/collection-status.json` records the attempted jobs, outcomes and file hashes. Retaining old data does not reset its original observation time. Provider restrictions halt the affected collector without access-control workarounds.
+
+`.github/workflows/refresh.yml` configures a six-hour GitHub Actions schedule: `23 */6 * * *` UTC, or 01:23, 07:23, 13:23 and 19:23 Asia/Ho_Chi_Minh. A manual dispatch and changes to the workflow on `main` can also trigger it. Scheduled execution may be delayed by GitHub. This is a configured schedule; successful end-to-end operation must be verified from actual Actions runs and the published collection-status record. The workflow collects, runs the Node checks, commits coherent public snapshots and requests a Pages rebuild.
+
+UTC daily history only advances when another day has closed; refreshing every six hours does not manufacture four new daily observations. Source-specific timestamps can differ. Browser price refreshes do not trigger all server collectors. Research reload rereads the published archive. TON browser refresh observations remain in that page's memory until the public collector publishes another snapshot. Catalog/TVL/stablecoin observations retain their source dates when their sections were not recollected.
+
+## Provenance and remaining gaps
+
+Public outputs preserve source URLs, request/capture times, contract/account identities, raw integer quantities where appropriate and response SHA-256 metadata. The research manifest covers the compressed and decoded archive. The event-study output also records hashes of its calculation, collection and classification code. Raw receipts are retained outside the website checkout during collection; consult the particular collector/report for their location. A normalized snapshot and a hash alone are not an independently replayable full-chain archive or proof that a provider's economic interpretation is correct.
+
+Full wallet lot accounting, holder-age cost basis, entity attribution and complete intervening token-transfer histories remain unavailable. The application does not implement or claim equivalence with A1Radar's proprietary ASI, MEFI, Strategic Capital, Shark/Whale Action, DSSI or Gem Radar models. It does not replace Realized/Balance/Delta/Undervalue/Diamond cost bands with price averages. There is no complete unlock model, predicted liquidation heatmap or verified whale-buy signal.
+
+No authenticated private research backend, credentials, portfolio or trading operation is included. Browser-delivered files and formulas are public and inspectable.
 
 ## Primary specifications
 
@@ -125,17 +119,14 @@ Checks cover source identity, units, partial failures, freshness, true calendar 
 - https://www.bitget.com/api-doc/spot/market/Get-Candle-Data
 - https://www.gate.com/docs/developers/apiv4/en/
 - https://docs.whitebit.com/public/http-v4/
-- https://docs.coingecko.com/demo/reference/coins-markets
-- https://docs.coingecko.com/demo/reference/crypto-global
+- https://docs.coingecko.com/reference/coins-markets
+- https://docs.coingecko.com/reference/coins-categories
 - https://api-docs.defillama.com/llms-free.txt
-- https://docs.a1radar.com/vi/features/holder-flow-index
-
+- https://mainnet.mirrornode.hedera.com/api/v1/docs/
+- https://hederacouncil.org/treasury
 - https://docs.tonconsole.com/tonapi/
 - https://docs.tonconsole.com/tonapi/rest-api/jettons/
-- https://github.com/tonkeeper/ton-assets/blob/main/jettons.json
 - https://eips.ethereum.org/EIPS/eip-20
 - https://docs.coingecko.com/reference/pool-trades-contract-address
-- https://drpc.org/docs/ethereum-api/executingtransactions/eth_call
-
-- https://www.binance.com/vi/support/announcement/detail/4fea39f8b6e54e1b88e388fc90ce323e
-- https://www.binance.com/en/support/announcement/detail/65af5039eae04563b47e424b9cae77ed
+- https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint
+- https://docs.a1radar.com/vi/features/accumulation-strength-index

@@ -110,7 +110,7 @@ function init(){
  $('research-reload').addEventListener('click',load);
  async function load(){if(state.busy)return;state.busy=true;$('research-reload').disabled=true;$('research-status').textContent='Đang đọc bản nghiên cứu và kiểm tra mã băm nến gốc…';try{const r=await loadDataset();state.data=r.data;state.manifest=r.manifest;reanalyze();}catch(e){$('research-status').textContent='Chưa đọc được bản mới: '+e.message+(state.data?' Giữ bản đang xem với thời điểm cũ.':' Không tạo điểm hoặc tín hiệu thay thế.');}finally{state.busy=false;$('research-reload').disabled=false;}}
  load();let lastDay=Math.floor(Date.now()/DAY);setInterval(()=>{const d=Math.floor(Date.now()/DAY);if(state.data&&d!==lastDay){lastDay=d;reanalyze(false);}},60000);
- if(!location.hash||location.hash==='#research')document.querySelector('[data-panel="research"]')?.click();
+ if(location.hash==='#research')document.querySelector('[data-panel="research"]')?.click();
 }
 return {checkManifest,validateDataset,loadDataset,analyzeAll,selectRows,scatter,table,pressureChart,init};
 });

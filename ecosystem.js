@@ -58,7 +58,9 @@
           priceUsd, marketCapUsd: optional(r.market_cap, 'Market cap', true), volume24hUsd: optional(r.total_volume, 'Volume', true),
           rank: r.market_cap_rank === null || r.market_cap_rank === undefined ? null : count(r.market_cap_rank, 'Rank'),
           return24hPct: optional(r.price_change_percentage_24h_in_currency === undefined ? r.price_change_percentage_24h : r.price_change_percentage_24h_in_currency, '24h percentage'),
+          return1hPct: optional(r.price_change_percentage_1h_in_currency, '1h percentage'),
           return7dPct: optional(r.price_change_percentage_7d_in_currency, '7d percentage'), return30dPct: optional(r.price_change_percentage_30d_in_currency, '30d percentage'),
+          return1yPct: optional(r.price_change_percentage_1y_in_currency, '1y percentage'),
           providerUpdatedAt, fetchedAt, sourcePage: page });
       } catch (e) { errors.push({ id: r && typeof r.id === 'string' ? r.id : null, message: e.message }); }
     }
@@ -119,7 +121,7 @@
       if (r.sourceId !== 'coingecko' || r.key !== 'coingecko:' + id) throw Error('Wrong market identity');
       text(r.symbol, 'Symbol'); text(r.name, 'Name'); numeric(r.priceUsd, 'USD price', true); if (r.priceUsd === 0) throw Error('Zero USD price');
       optional(r.marketCapUsd, 'Market cap', true); optional(r.volume24hUsd, 'Volume', true);
-      for (const k of ['return24hPct', 'return7dPct', 'return30dPct']) optional(r[k], k);
+      for (const k of ['return1hPct', 'return24hPct', 'return7dPct', 'return30dPct', 'return1yPct']) optional(r[k], k);
       timestamp(r.providerUpdatedAt); timestamp(r.fetchedAt);
     }
     let previous = 0;
@@ -164,7 +166,7 @@
     const pages = [], provenance = [];
     for (let page = 1; page <= 4; page++) {
       if (page > 1) await wait(8000);
-      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&sparkline=false&price_change_percentage=7d%2C30d';
+      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=' + page + '&sparkline=false&price_change_percentage=1h%2C24h%2C7d%2C30d%2C1y';
       const result = await requestRaw(url, fetchImpl, now);
       const parsed = parseMarkets(result.raw, { page, fetchedAt: result.fetchedAt, now: now() });
       if (!parsed.rows.length) throw Error('Trang CoinGecko ' + page + ' không có giá hợp lệ; giữ bản trước.');

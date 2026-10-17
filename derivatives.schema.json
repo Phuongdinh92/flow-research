@@ -1,0 +1,523 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phuongdinh92.github.io/flow-research/derivatives.schema.json",
+  "title": "Flow Research public Hyperliquid original-DEX derivatives snapshot",
+  "description": "Shape validation only. FlowDerivatives.validateSnapshot additionally replays raw decimal projections, validates exact native identity and metadata index alignment, source requests, UTC funding windows, duplicates, derived coverage, and forbidden unsupported claims. Raw archive response SHA256 receipts are audited by the collector/replay script.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "kind",
+    "sourceId",
+    "dex",
+    "marketType",
+    "generatedAt",
+    "asOf",
+    "providerAsOf",
+    "timestampBasis",
+    "finishedAt",
+    "metadata",
+    "assets",
+    "contextReceipt",
+    "fundingHistories",
+    "coverage",
+    "capabilities",
+    "errors",
+    "collectionState"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "kind": {
+      "const": "derivatives-context"
+    },
+    "sourceId": {
+      "const": "hyperliquid"
+    },
+    "dex": {
+      "const": ""
+    },
+    "marketType": {
+      "const": "perpetual"
+    },
+    "generatedAt": {
+      "type": "integer",
+      "minimum": 1500000000000,
+      "maximum": 4500000000000
+    },
+    "asOf": {
+      "type": "integer",
+      "minimum": 1500000000000,
+      "maximum": 4500000000000
+    },
+    "finishedAt": {
+      "type": "integer",
+      "minimum": 1500000000000,
+      "maximum": 4500000000000
+    },
+    "providerAsOf": {
+      "type": "null"
+    },
+    "timestampBasis": {
+      "const": "collector_response_received_utc"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "universe",
+        "collateralToken"
+      ],
+      "properties": {
+        "universe": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nativeMetadata"
+          }
+        },
+        "collateralToken": {
+          "const": 0
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "contextReceipt": {
+      "$ref": "#/$defs/receipt"
+    },
+    "fundingHistories": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/fundingHistory"
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "metadataEntries",
+        "activeMarkets",
+        "delistedMarkets",
+        "fundingRequested",
+        "fundingCaptured"
+      ],
+      "properties": {
+        "metadataEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeMarkets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delistedMarkets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fundingRequested": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fundingCaptured": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fundingRecords": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fundingCompleteWindows": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "liquidationHeatmap",
+        "whaleAttribution",
+        "openInterestHistory"
+      ],
+      "properties": {
+        "liquidationHeatmap": {
+          "const": false
+        },
+        "whaleAttribution": {
+          "const": false
+        },
+        "openInterestHistory": {
+          "const": false
+        },
+        "wholeDerivativesMarket": {
+          "const": false
+        }
+      }
+    },
+    "errors": {
+      "type": "array"
+    },
+    "collectionState": {
+      "enum": [
+        "complete",
+        "partial"
+      ]
+    }
+  },
+  "$defs": {
+    "nativeMetadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "szDecimals",
+        "maxLeverage"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "szDecimals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18
+        },
+        "maxLeverage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "isDelisted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rawContext": {
+      "type": "object",
+      "required": [
+        "funding",
+        "openInterest",
+        "dayNtlVlm"
+      ],
+      "properties": {
+        "funding": {
+          "type": "string",
+          "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+        },
+        "openInterest": {
+          "type": "string",
+          "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+        },
+        "dayNtlVlm": {
+          "type": "string",
+          "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+        },
+        "markPx": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "oraclePx": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "required": [
+        "key",
+        "sourceId",
+        "dex",
+        "marketType",
+        "nativeName",
+        "nativeIndex",
+        "isDelisted",
+        "fundingRateHourly",
+        "openInterestBase",
+        "openInterestQuoteAtMark",
+        "markPrice",
+        "oraclePrice",
+        "volume24hQuote",
+        "rawMetadata",
+        "rawContext"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^hyperliquid:perp:main:.+$"
+        },
+        "sourceId": {
+          "const": "hyperliquid"
+        },
+        "dex": {
+          "const": ""
+        },
+        "marketType": {
+          "const": "perpetual"
+        },
+        "nativeName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nativeIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "isDelisted": {
+          "type": "boolean"
+        },
+        "fundingRateHourly": {
+          "type": "number"
+        },
+        "openInterestBase": {
+          "type": "number",
+          "minimum": 0
+        },
+        "openInterestQuoteAtMark": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "openInterestQuoteAtOracle": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "markPrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "oraclePrice": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "volume24hQuote": {
+          "type": "number",
+          "minimum": 0
+        },
+        "rawMetadata": {
+          "$ref": "#/$defs/nativeMetadata"
+        },
+        "rawContext": {
+          "$ref": "#/$defs/rawContext"
+        }
+      }
+    },
+    "fundingRow": {
+      "type": "object",
+      "required": [
+        "time",
+        "hour",
+        "fundingRate",
+        "premiumRate",
+        "raw"
+      ],
+      "properties": {
+        "time": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "hour": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "fundingRate": {
+          "type": "number"
+        },
+        "premiumRate": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "raw": {
+          "type": "object",
+          "required": [
+            "coin",
+            "fundingRate",
+            "time"
+          ],
+          "properties": {
+            "coin": {
+              "type": "string"
+            },
+            "time": {
+              "type": "integer",
+              "minimum": 1500000000000,
+              "maximum": 4500000000000
+            },
+            "fundingRate": {
+              "type": "string",
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+            },
+            "premium": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "fundingHistory": {
+      "type": "object",
+      "required": [
+        "key",
+        "nativeName",
+        "startTime",
+        "endTime",
+        "intervalMs",
+        "rows",
+        "coverage",
+        "receipts"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^hyperliquid:perp:main:.+$"
+        },
+        "nativeName": {
+          "type": "string"
+        },
+        "startTime": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "endTime": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "intervalMs": {
+          "const": 3600000
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fundingRow"
+          }
+        },
+        "receipts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/receipt"
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "required": [
+            "expectedHours",
+            "returnedHours",
+            "missingHours",
+            "complete"
+          ],
+          "properties": {
+            "expectedHours": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "returnedHours": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missingHours": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1500000000000,
+                "maximum": 4500000000000
+              }
+            },
+            "complete": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "required": [
+        "url",
+        "method",
+        "requestBody",
+        "startedAt",
+        "fetchedAt",
+        "httpStatus",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "url": {
+          "const": "https://api.hyperliquid.xyz/info"
+        },
+        "method": {
+          "const": "POST"
+        },
+        "requestBody": {
+          "type": "object"
+        },
+        "startedAt": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "fetchedAt": {
+          "type": "integer",
+          "minimum": 1500000000000,
+          "maximum": 4500000000000
+        },
+        "httpStatus": {
+          "const": 200
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 2
+        }
+      }
+    }
+  }
+}

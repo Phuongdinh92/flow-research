@@ -29,11 +29,11 @@ function fetchDataset(m = manifest, bytes = compressed) { return async url => ur
 test('actual published gzip and decoded JSON both match manifest SHA-256 and sizes', () => {
   assert.equal(compressed.length, manifest.snapshot.bytes); assert.equal(decoded.length, manifest.snapshot.decodedBytes);
   assert.equal(hash(compressed), manifest.snapshot.sha256); assert.equal(hash(decoded), manifest.snapshot.decodedSha256);
-  assert.equal(Object.keys(R.validateDataset(full, manifest, NOW).histories).length, 511);
-  assert.equal(Object.values(full.histories).reduce((s, h) => s + h.bars.length, 0), 166221);
+  assert.equal(Object.keys(R.validateDataset(full, manifest, NOW).histories).length, manifest.sourceCoverage.completed);
+  const histories=Object.values(full.histories);assert.ok(histories.every(h=>h.bars.length>0&&h.bars.length<=manifest.requestedDays));assert.equal(histories.filter(h=>h.bars.length===manifest.requestedDays).length,manifest.sourceCoverage.fullLength);assert.equal(histories.filter(h=>h.bars.length<manifest.requestedDays).length,manifest.sourceCoverage.shortHistory);
 });
 test('real loader checks gzip hash, decompressed hash, schema and coverage together', async () => {
-  const out = await R.loadDataset(fetchDataset()); assert.equal(out.data.generatedAt, manifest.generatedAt); assert.equal(out.data.sourceCoverage.completed, 511);
+  const out = await R.loadDataset(fetchDataset()); assert.equal(out.data.generatedAt, manifest.generatedAt); assert.equal(out.data.sourceCoverage.completed, manifest.sourceCoverage.completed);
   const bad = Buffer.from(compressed); bad[bad.length - 1] ^= 1;
   await assert.rejects(R.loadDataset(fetchDataset(manifest, bad)), /băm|hash/i);
   const wrongDecoded = structuredClone(manifest); wrongDecoded.snapshot.decodedSha256 = 'a'.repeat(64);
@@ -87,8 +87,8 @@ test('malformed OHLC data is rejected at validation or explicitly excluded durin
   assert.equal(out.errors.length, 1); assert.equal(out.analyses.length, 2); assert.equal(out.errors[0].key, first(f.raw).key);
 });
 test('actual full current dataset screening retains all source pairs and no phantom rows', () => {
-  const out = R.analyzeAll(full, S, { now: OBSERVED_NOW }); assert.equal(out.errors.length, 0); assert.equal(out.analyses.length, 511);
-  assert.equal(new Set(out.analyses.map(x => x.key)).size, 511); assert.ok(out.analyses.every(x => x.sourceId === 'binance' && x.quote === 'USDT'));
+  const out = R.analyzeAll(full, S, { now: OBSERVED_NOW }); assert.equal(out.errors.length, 0); assert.equal(out.analyses.length, manifest.sourceCoverage.completed);
+  assert.equal(new Set(out.analyses.map(x => x.key)).size, manifest.sourceCoverage.completed); assert.ok(out.analyses.every(x => x.sourceId === 'binance' && x.quote === 'USDT'));
   assert.ok(out.analyses.some(x => x.coverage.contiguousTailDays < 200 && x.candidate !== null));
   assert.ok(out.analyses.filter(x => x.coverage.contiguousTailDays < 37).every(x => x.candidate === null));
 });

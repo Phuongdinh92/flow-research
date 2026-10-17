@@ -38,10 +38,10 @@ test('malformed identifiers, duplicate keys, zero price and fake future timestam
 });
 
 function domHarness(initialFetch,scanSource,history=async id=>({bars:bars().map(b=>({...b,buy:id==='bitget'?null:b.buy})),asOf:now,fetchedAt:now,dropped:1}),sourceList){
- const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close','overview-chart','overview-meta','view-bubbles','view-scatter','chart-exclusions','flow-chart','flow-meta','flow-exclusions','bubble-size','bubble-count','history-count','load-history','cancel-history','history-status'];
- class Element{constructor(id){this.id=id;this.value=id==='source'?'all':id==='sort'?'turnover24':'';this.textContent=id==='log'?'Chưa gửi yêu cầu mạng.':'';this.innerHTML='';this.handlers={};this.open=false;}addEventListener(k,f){this.handlers[k]=f;}showModal(){this.open=true;}close(){this.open=false;}}
+ const ids=['load','count','source-count','coverage-sub','asof','fetched','coverage','export','search','source','sort','table','prev','next','page-info','status','log','detail','detail-title','detail-body','close','overview-chart','overview-meta','view-bubbles','view-scatter','view-columns','view-movers','view-countertrend','chart-exclusions','flow-chart','flow-meta','flow-exclusions','bubble-size','bubble-count','history-count','load-history','cancel-history','history-status'];
+ class Element{constructor(id){this.id=id;this.value=id==='source'?'all':id==='sort'?'turnover24':'';this.textContent=id==='log'?'Chưa gửi yêu cầu mạng.':'';this.innerHTML='';this.handlers={};this.open=false;}addEventListener(k,f){this.handlers[k]=f;}insertAdjacentHTML(position,html){this.innerHTML+=html;}setAttribute(name,value){this[name]=value;}showModal(){this.open=true;}close(){this.open=false;}}
  const nodes=Object.fromEntries(ids.map(id=>[id,new Element(id)])),nav=new Element('nav');
- const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowCharts:require('./charts-core.js'),FlowChartsView:require('./charts-view.js'),FlowMarket:{scanSource,history,...(sourceList?{SOURCES:sourceList}:{})},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
+ const ctx={console,Date,Blob,URL,setTimeout,clearTimeout,AbortSignal,setInterval:()=>0,FlowMarketOverview:require('./market-overview.js'),FlowCharts:require('./charts-core.js'),FlowChartsView:require('./charts-view.js'),FlowMarket:{scanSource,history,...(sourceList?{SOURCES:sourceList}:{})},fetch:initialFetch,document:{querySelector:s=>s==='nav'?nav:nodes[s.slice(1)],querySelectorAll:()=>[],createElement:()=>({click(){}})}};
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('./market-ui.js','utf8'),ctx);return {nodes,ctx};
 }
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -82,6 +82,14 @@ test('Binance flow coverage follows all four venue filters and the searched univ
   assert.doesNotMatch(h.nodes['flow-chart'].innerHTML,/data-key="binance:/);
   assert.equal(h.nodes['load-history'].disabled,true);
  }
+});
+test('venue presentation modes use real returns and keep the same-source BTC benchmark after search',async()=>{
+ const btc=row(),target=row('binance',{key:'binance:ETHUSDT',instrument:'ETHUSDT',base:'ETH',return24:-.1});
+ const fetcher=async url=>({ok:true,json:async()=>url.includes('flow-snapshot')?flowSnapshot():url.includes('history-snapshot')?{schemaVersion:1,histories:{}}:snapshot([source('binance',{rows:[btc,target]})])});
+ const h=domHarness(fetcher,async id=>source(id));await flush();
+ h.nodes['view-columns'].handlers.click();assert.match(h.nodes['overview-chart'].innerHTML,/market-column-row/);assert.match(h.nodes['overview-chart'].innerHTML,/data-key="binance:ETHUSDT"/);
+ h.nodes['view-movers'].handlers.click();assert.match(h.nodes['overview-chart'].innerHTML,/Tăng mạnh/);assert.match(h.nodes['overview-chart'].innerHTML,/Giảm mạnh/);
+ h.nodes.search.value='ETH';h.nodes.search.handlers.input();h.nodes['view-countertrend'].handlers.click();assert.match(h.nodes['overview-chart'].innerHTML,/data-key="binance:ETHUSDT"/);assert.match(h.nodes['overview-chart'].innerHTML,/BTC \+2%/);assert.doesNotMatch(h.nodes['overview-chart'].innerHTML,/data-key="binance:BTCUSDT"/);
 });
 test('market points open real candle, delta and window-reset CVD charts',async()=>{
  const h=domHarness(routeFetch,async id=>source(id));await flush();h.nodes['overview-chart'].handlers.click({target:{closest:()=>({dataset:{key:'binance:BTCUSDT'}})}});await flush();assert.equal(h.nodes.detail.open,true);assert.match(h.nodes['detail-body'].innerHTML,/chart-candle-body/);

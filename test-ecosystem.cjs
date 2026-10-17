@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const E = require('./ecosystem.js');
 const now = Date.UTC(2026, 9, 16, 8), tests = [];
-const coin = (extra = {}) => ({id:'bitcoin',symbol:'btc',name:'Bitcoin',current_price:100,market_cap:1000,total_volume:50,market_cap_rank:1,last_updated:new Date(now-60000).toISOString(),price_change_percentage_24h:2,price_change_percentage_7d_in_currency:-3,price_change_percentage_30d_in_currency:null,...extra});
+const coin = (extra = {}) => ({id:'bitcoin',symbol:'btc',name:'Bitcoin',current_price:100,market_cap:1000,total_volume:50,market_cap_rank:1,last_updated:new Date(now-60000).toISOString(),price_change_percentage_1h_in_currency:.5,price_change_percentage_1y_in_currency:80,price_change_percentage_24h:2,price_change_percentage_7d_in_currency:-3,price_change_percentage_30d_in_currency:null,...extra});
 function test(name, fn) { tests.push({name,fn}); }
 test('catalog identities are provider IDs, not shared ticker symbols', () => {
   const r = E.parseCatalog([{id:'a',symbol:'same',name:'A',platforms:{ethereum:'0x1'}},{id:'b',symbol:'same',name:'B',platforms:{ethereum:'',base:'0x2'}}]);
@@ -13,7 +13,7 @@ test('catalog identities are provider IDs, not shared ticker symbols', () => {
 });
 test('market percentages retain percent units and missing values remain null', () => {
   const r = E.parseMarkets([coin()],{now,fetchedAt:now,page:1}).rows[0];
-  assert.equal(r.return24hPct,2); assert.equal(r.return7dPct,-3); assert.equal(r.return30dPct,null);
+  assert.equal(r.return1hPct,.5);assert.equal(r.return1yPct,80);assert.equal(r.return24hPct,2); assert.equal(r.return7dPct,-3); assert.equal(r.return30dPct,null);
   assert.equal(r.priceUsd,100); assert.equal(r.providerUpdatedAt,now-60000); assert.equal(r.key,'coingecko:bitcoin');
 });
 test('unpriced, malformed and future data is excluded with explicit errors', () => {
@@ -67,7 +67,7 @@ test('live market refresh is paced, source-preserving and leaves macro observati
     return {ok:true,text:async()=>JSON.stringify(body)};
   };
   const next=await E.refresh(previous,fetchImpl,{wait:async ms=>waits.push(ms),now:()=>now});
-  assert.equal(calls.length,5); assert.deepEqual(waits,[8000,8000,8000,8000]);
+  assert.ok(calls.slice(0,4).every(url=>url.includes('1h%2C24h%2C7d%2C30d%2C1y')));assert.equal(calls.length,5); assert.deepEqual(waits,[8000,8000,8000,8000]);
   assert.ok(calls.every(x=>!x.includes('/coins/list'))); assert.equal(next.global.pricedCount,4);
   assert.equal(next.stablecoinHistory,previous.stablecoinHistory); assert.equal(next.chains,previous.chains);
   assert.equal(next.global.catalogCount,previous.global.catalogCount);
