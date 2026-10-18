@@ -10,17 +10,38 @@ const output = path.resolve(__dirname, 'data/holder-history-snapshot.json');
 const MINIMUM = process.env.HBAR_MINIMUM_RAW || '100000000000000'; // 1 million native HBAR, not 1 million tinybars.
 const args = process.argv.slice(2);
 function option(name, fallback) { const i = args.indexOf(name); return i < 0 ? fallback : args[i + 1]; }
-const days = Number(option('--days', '30'));
-if (!Number.isInteger(days) || days < 1 || days > 120) throw Error('--days must be an integer from 1 to 120');
+const days = Number(option('--days', '121'));
+if (!Number.isInteger(days) || days < 1 || days > 121) throw Error('--days must be an integer from 1 to 121 (snapshot count; 121 snapshots cover 120 intervals)');
 const cutoff = option('--cutoff', process.env.HBAR_CUTOFF || (Math.floor(Date.now() / 86400000) * 86400) + '.000000000');
 if (!/^[1-9][0-9]{8,10}\.000000000$/.test(cutoff) || BigInt(cutoff.split('.')[0]) % 86400n !== 0n) throw Error('--cutoff must be a UTC-midnight seconds.000000000 timestamp');
 if (!/^[1-9][0-9]{0,30}$/.test(MINIMUM)) throw Error('Invalid HBAR_MINIMUM_RAW');
 const offsets = [...new Set([...Array.from({ length: days }, (_, i) => i), 1, 7, 30, 90])].sort((a, b) => a - b);
 const IDS = offsets.map(n => [n === 0 ? 'latest' : n + 'd', n]);
-fs.mkdirSync(proofDir, { recursive: true });
+function cutoffAt(latestCutoff, offsetDays) {
+  if (!/^[1-9][0-9]{8,10}\.000000000$/.test(latestCutoff) || BigInt(latestCutoff.split('.')[0]) % 86400n !== 0n || !Number.isInteger(offsetDays) || offsetDays < 0) throw Error('Invalid daily cutoff');
+  return (BigInt(latestCutoff.replace('.', '')) - BigInt(offsetDays) * 86400000000000n).toString().replace(/([0-9]{9})$/, '.$1');
+}
+function reusableObservations(previous, latestCutoff, requestedIds, minimumBalanceRaw = MINIMUM) {
+  if (!previous) return [];
+  H.validateSnapshot(previous);
+  const byCutoff = new Map(previous.observations.map(o => [o.requestedCutoff, o]));
+  return requestedIds.flatMap(([id, offset]) => {
+    const o = byCutoff.get(cutoffAt(latestCutoff, offset));
+    if (!o || o.coverage.minimumBalanceRaw !== minimumBalanceRaw || o.coverage.requestedTopN !== 1000) return [];
+    // Offset labels roll with the new cutoff. The original source timestamp,
+    // request/fetch clocks, page URLs, hashes and balances remain unchanged.
+    return [{ ...o, id }];
+  });
+}
+function readPrevious() {
+  if (fs.existsSync(output)) return H.validateSnapshot(JSON.parse(fs.readFileSync(output, 'utf8')));
+  if (fs.existsSync(output + '.manifest.json')) return H.validateSnapshot(require('./pack-data.cjs').readPacked(output).data);
+  return null;
+}
 const wait = ms => new Promise(r => setTimeout(r, ms));
 let nextRequestAt = 0, stopped = false;
 async function request(url) {
+  fs.mkdirSync(proofDir, { recursive: true });
   if (stopped) throw Error('Collection halted after an earlier source error');
   const key = crypto.createHash('sha256').update(url).digest('hex');
   const bodyPath = path.join(proofDir, key + '.raw.json'), metaPath = path.join(proofDir, key + '.meta.json');
@@ -41,7 +62,7 @@ async function request(url) {
   try { return { value: H.parseSource(body), proof }; } catch (e) { stopped = true; throw e; }
 }
 async function collect(id, days) {
-  const requestedCutoff = (BigInt(cutoff.replace('.', '')) - BigInt(days) * 86400000000000n).toString().replace(/([0-9]{9})$/, '.$1');
+  const requestedCutoff = cutoffAt(cutoff, days);
   const params = new URLSearchParams({ limit: '100', order: 'asc', 'account.balance': 'gte:' + MINIMUM, timestamp: 'lte:' + requestedCutoff });
   let url = BASE + '/api/v1/balances?' + params.toString(), pages = [], timestamp = null;
   while (url) {
@@ -58,7 +79,9 @@ async function collect(id, days) {
   fs.writeFileSync(path.join(proofDir, id + '-observation.json'), JSON.stringify(observation) + '\n'); return observation;
 }
 async function main() {
-  const observations = [], queue = [...IDS];
+  fs.mkdirSync(proofDir, { recursive: true });
+  const observations = reusableObservations(readPrevious(), cutoff, IDS), reused = new Set(observations.map(o => o.id)), queue = IDS.filter(([id]) => !reused.has(id));
+  process.stdout.write(JSON.stringify({ phase: 'reuse', reused: observations.length, collect: queue.length, dailySnapshotCount: days, latestCutoff: cutoff }) + '\n');
   // Independent historical cutoffs, bounded concurrency. Pages for one cutoff are sequential.
   await Promise.all([0, 1].map(async () => { try { while (queue.length) { if (stopped) throw Error('Collection halted after an earlier source error'); const [id, days] = queue.shift(); observations.push(await collect(id, days)); } } catch (e) { stopped = true; throw e; } }));
   observations.sort((a, b) => IDS.findIndex(x => x[0] === a.id) - IDS.findIndex(x => x[0] === b.id));
@@ -68,4 +91,4 @@ async function main() {
   process.stdout.write('SAVED ' + output + '\n');
 }
 if (require.main === module) main().catch(e => { console.error(e.stack || e); process.exitCode = 1; });
-module.exports = { collect, request };
+module.exports = { collect, request, cutoffAt, reusableObservations, readPrevious };

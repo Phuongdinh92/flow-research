@@ -36,5 +36,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Restore verified audit copies from multipart transport
+        run: node pack-data.cjs --materialize data/holder-history-snapshot.json data/source-receipts/hedera-history-20261017-120d.json
       - name: Verify calculations and published data
         run: node --test test-*.cjs

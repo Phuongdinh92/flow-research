@@ -42,9 +42,28 @@ const PACKED={
  'dex-acquisition':['data/chain-ledger-snapshot.json'],'inventory-reconciliation':['data/inventory-ledger.json'],'derivatives':['data/derivatives-snapshot.json']
 };
 for(const job of jobs){job.packed=PACKED[job.id]||[];job.files=[...new Set([...job.files,...job.packed.flatMap(f=>[f+'.gz',f+'.manifest.json'])])];job.pack=function(){for(const f of this.packed)require('./pack-data.cjs').packFile(path.join(ROOT,f));};}
-function backup(files,root=ROOT){return new Map(files.map(f=>{const p=path.join(root,f);return [f,fs.existsSync(p)?fs.readFileSync(p):null];}));}
-function restore(saved,root=ROOT){for(const [f,b] of saved){const p=path.join(root,f);if(b===null){if(fs.existsSync(p))fs.unlinkSync(p);}else{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p+'.restore',b);fs.renameSync(p+'.restore',p);}}}
-function fileRecords(files,root=ROOT){return files.filter(f=>fs.existsSync(path.join(root,f))).map(f=>({path:f,sha256:sha(fs.readFileSync(path.join(root,f))),bytes:fs.statSync(path.join(root,f)).size}));}
+// Parts are a variable-size transport family: their count can grow or shrink
+// after packing. Keep the family roots as well as the files that existed before
+// collection, so a failed transaction cannot leave a new manifest's parts next
+// to a restored old manifest (or lose parts removed by a successful earlier job).
+function shardBases(files){return [...new Set(files.filter(f=>f.endsWith('.gz')))];}
+function shardFiles(bases,root=ROOT){
+ const files=[];
+ for(const base of bases){const directory=path.dirname(base),absolute=path.join(root,directory),prefix=path.basename(base)+'.part-';if(!fs.existsSync(absolute))continue;
+  for(const name of fs.readdirSync(absolute).sort())if(name.startsWith(prefix)&&/^\d{3,}$/.test(name.slice(prefix.length)))files.push(path.join(directory,name));
+ }
+ return files;
+}
+function publicationFiles(files,root=ROOT){return [...new Set([...files,...shardFiles(shardBases(files),root)])];}
+function backup(files,root=ROOT){
+ const saved=new Map(publicationFiles(files,root).map(f=>{const p=path.join(root,f);return [f,fs.existsSync(p)?fs.readFileSync(p):null];}));
+ Object.defineProperty(saved,'shardBases',{value:shardBases(files)});return saved;
+}
+function restore(saved,root=ROOT){
+ for(const file of shardFiles(saved.shardBases||[],root))if(!saved.has(file))fs.unlinkSync(path.join(root,file));
+ for(const [f,b] of saved){const p=path.join(root,f);if(b===null){if(fs.existsSync(p))fs.unlinkSync(p);}else{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p+'.restore',b);fs.renameSync(p+'.restore',p);}}
+}
+function fileRecords(files,root=ROOT){return publicationFiles(files,root).filter(f=>fs.existsSync(path.join(root,f))).map(f=>({path:f,sha256:sha(fs.readFileSync(path.join(root,f))),bytes:fs.statSync(path.join(root,f)).size}));}
 async function guarded(job,run,root=ROOT){
  const saved=backup(job.files,root),startedAt=Date.now();
  try{await run(job);await job.validate.call(job);if(job.pack)await job.pack.call(job);return {id:job.id,status:'ok',startedAt,finishedAt:Date.now(),files:fileRecords(job.files,root)};}

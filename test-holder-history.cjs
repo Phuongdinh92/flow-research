@@ -94,12 +94,55 @@ test('infrastructure exclusions rerank the full fetched universe but preserve ra
   assert.equal(H.distribution(older, { excludeKnownInfrastructure: true })[4].complete, false);
   assert.equal(H.compare(older, newer, { excludeKnownInfrastructure: true }).rankMembership.complete, false);
 });
-test('published historical source, when present, validates and every retained raw page replays exactly', { skip: !fs.existsSync(path.join(__dirname, 'data/holder-history-snapshot.json')) }, () => {
-  const s = H.validateSnapshot(JSON.parse(fs.readFileSync(path.join(__dirname, 'data/holder-history-snapshot.json'))));
+test('published historical source validates and every locally retained raw page replays exactly', () => {
+  const file = path.join(__dirname, 'data/holder-history-snapshot.json');
+  const s = H.validateSnapshot(fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : require('./pack-data.cjs').readPacked(file).data);
   const crypto = require('node:crypto'), dir = path.resolve(__dirname, '../probes/holder-history-v9');
   for (const o of s.observations) {
     if (!fs.existsSync(path.join(dir, o.provenance[0].rawFile))) continue;
     const pages = o.provenance.map(proof => { const body = fs.readFileSync(path.join(dir, proof.rawFile), 'utf8'); assert.equal(crypto.createHash('sha256').update(body).digest('hex'), proof.sha256); return { value: H.parseSource(body), proof }; });
     assert.deepEqual(H.normalizeObservation(o.id, o.requestedCutoff, pages, o.coverage.minimumBalanceRaw, { startedAt: o.startedAt, fetchedAt: o.fetchedAt, requestedTopN: o.coverage.requestedTopN }), o);
   }
+});
+test('120 daily intervals require 121 consecutive observations; missing dates and 122 daily observations are rejected', () => {
+  const cutoff = BigInt(newStamp.replace('.', ''));
+  const observations = Array.from({ length: 121 }, (_, i) => {
+    const stamp = (cutoff - BigInt(i) * 86400000000000n).toString().replace(/([0-9]{9})$/, '.$1');
+    return fixture(i ? i + 'd' : 'latest', stamp, rows.slice(0, 3));
+  });
+  const s = { ...snapshot(observations), history: { requestedDailySnapshotCount: 121, cutoffPolicy: 'UTC_midnight_at_or_before_with_15_minute_source_granularity', requestedLatestCutoff: newStamp, interpolation: false } };
+  assert.equal(H.validateSnapshot(s).observations.length, 121);
+  assert.throws(() => H.validateSnapshot({ ...s, observations: observations.filter(o => o.id !== '60d') }), /Missing requested daily observation/);
+  assert.throws(() => H.validateSnapshot({ ...s, history: { ...s.history, requestedDailySnapshotCount: 122 } }), /Invalid integer/);
+});
+test('rolling collection reuses absolute UTC cutoffs without rewriting source provenance or retaining future observations', () => {
+  const C = require('./collect_holder_history.cjs');
+  const old = snapshot([0, 1, 2].map(i => fixture(i ? i + 'd' : 'latest', C.cutoffAt(newStamp, i), rows.slice(0, 3))));
+  const nextCutoff = (BigInt(newStamp.split('.')[0]) + 86400n) + '.000000000';
+  const next = C.reusableObservations(old, nextCutoff, [['latest', 0], ['1d', 1], ['2d', 2], ['3d', 3]], '1');
+  assert.deepEqual(next.map(o => o.id), ['1d', '2d', '3d']);
+  next.forEach((o, i) => assert.deepEqual({ ...o, id: old.observations[i].id }, old.observations[i]));
+  const earlier = C.reusableObservations(old, C.cutoffAt(newStamp, 1), [['latest', 0], ['1d', 1]], '1');
+  assert.deepEqual(earlier.map(o => o.requestedCutoff), old.observations.slice(1).map(o => o.requestedCutoff));
+  assert.deepEqual(C.reusableObservations(old, nextCutoff, [['1d', 1]], '2'), []);
+  assert.throws(() => C.cutoffAt('1792108801.000000000', 1), /Invalid daily cutoff/);
+});
+test('public holder loader uses verified compressed transport, preserves fetch injection and still enforces holder schema', async () => {
+  const crypto = require('node:crypto'), zlib = require('node:zlib'), sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const s = snapshot([fixture('latest', newStamp, rows.slice(0, 3))]);
+  async function load(value) {
+    const decoded = Buffer.from(JSON.stringify(value)), compressed = zlib.gzipSync(decoded), calls = [];
+    const manifest = { schemaVersion: 1, kind: 'public-data-manifest', transportVersion: 1, identity: { schemaVersion: 1 }, payload: { url: 'sample.json.gz', compression: 'gzip', bytes: compressed.length, decodedBytes: decoded.length, sha256: sha(compressed), decodedSha256: sha(decoded) } };
+    const result = H.loadSnapshot('./data/sample.json', async (url, init) => {
+      calls.push(url); assert.equal(init.credentials, 'omit');
+      if (url.endsWith('.manifest.json')) return new Response(JSON.stringify(manifest));
+      if (url.endsWith('.json.gz')) return new Response(compressed);
+      throw Error('Unverified canonical JSON must not be requested');
+    });
+    return { result, calls };
+  }
+  const good = await load(s); assert.deepEqual(await good.result, s);
+  assert.deepEqual(good.calls, ['./data/sample.json.manifest.json', './data/sample.json.gz']);
+  const bad = await load({ ...s, asset: { ...s.asset, chain: 'wrong-chain' } });
+  await assert.rejects(bad.result, /identity mismatch/);
 });

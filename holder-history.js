@@ -74,7 +74,8 @@
       if (days > 0n && stamp(o.timestamp) >= stamp(latest.timestamp)) throw Error('Historical snapshot is not older');
     });
     if (s.history !== undefined) {
-      const h = s.history; integer(h.requestedDailySnapshotCount, 1, 120);
+      // N consecutive daily intervals require N + 1 source observations.
+      const h = s.history; integer(h.requestedDailySnapshotCount, 1, 121);
       if (h.cutoffPolicy !== 'UTC_midnight_at_or_before_with_15_minute_source_granularity' || h.requestedLatestCutoff !== latest.requestedCutoff || stamp(h.requestedLatestCutoff) % 86400000000000n !== 0n || h.interpolation !== false) throw Error('Invalid daily history policy');
       for (let i = 0; i < h.requestedDailySnapshotCount; i++) if (!seen.has(i ? i + 'd' : 'latest')) throw Error('Missing requested daily observation');
     }
@@ -136,6 +137,10 @@
     const neg = typeof v === 'string' && v.startsWith('-'), n = raw(neg ? v.slice(1) : v); integer(decimals, 0, 30); integer(maxFraction, 0, 30); const places = Math.min(decimals, maxFraction), trim = decimals - places, rounded = trim ? (n + 10n ** BigInt(trim) / 2n) / (10n ** BigInt(trim)) : n, scale = 10n ** BigInt(places), whole = (rounded / scale).toString(), fraction = places ? (rounded % scale).toString().padStart(places, '0').replace(/0+$/, '') : '';
     return (neg && rounded ? '−' : '') + (group ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : whole) + (fraction ? '.' + fraction : '');
   }
-  async function loadSnapshot(url = './data/holder-history-snapshot.json', fetchImpl = globalThis.fetch) { const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000); try { const r = await fetchImpl(url, { credentials: 'omit', cache: 'no-store', signal: controller.signal }); if (!r.ok) throw Error('Holder history HTTP ' + r.status); return validateSnapshot(await r.json()); } finally { clearTimeout(timer); } }
+  async function loadSnapshot(url = './data/holder-history-snapshot.json', fetchImpl = globalThis.fetch) {
+    const transport = typeof module === 'object' && module.exports ? require('./public-data.js') : globalThis.FlowPublicData;
+    if (!transport?.loadJSON) throw Error('Verified public-data transport is required for holder history');
+    return transport.loadJSON(url, { fetchImpl, validate: validateSnapshot });
+  }
   return Object.freeze({ ASSET, GROUPS, CLASSIFICATION_AS_OF, knownAccountInfo, rankedRows, parseSource, timestampMs, validateObservation, validateSnapshot, normalizeObservation, distribution, compare, cohortSeries, formatRaw, loadSnapshot });
 });

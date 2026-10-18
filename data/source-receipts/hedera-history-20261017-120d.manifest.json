@@ -1,0 +1,12 @@
+{
+  "file": "hedera-history-20261017-120d.json.gz",
+  "encoding": "gzip",
+  "compressedBytes": 3414528,
+  "compressedSha256": "d561b8ba08cca3f4c28c5349fe5f48cc6dcd28ba548c41f51da793b0581d6f96",
+  "decodedBytes": 24470072,
+  "decodedSha256": "3049640c68354a6d775cbc4ae8da0a253228a95e8968e520ab28e32cabd8f38d",
+  "responseCount": 1516,
+  "observationCount": 89,
+  "failedResponseCount": 1,
+  "unavailableOriginalReceiptObservationCount": 32
+}

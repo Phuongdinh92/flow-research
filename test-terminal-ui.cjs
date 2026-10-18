@@ -9,7 +9,7 @@ const L=require('./chain-ledger.js');
 const S=require('./signal-core.js');
 const I=require('./intelligence-core.js');
 const json=f=>JSON.parse(fs.readFileSync('data/'+f,'utf8'));
-const history=json('holder-history-snapshot.json');
+const history=require('./pack-data.cjs').readPacked(require('node:path').join(__dirname,'data/holder-history-snapshot.json')).data;
 const ledger=json('chain-ledger-snapshot.json');
 const study=json('intelligence-study.json');
 test('token search retains native venue identity and puts exact matches before prefix matches',()=>{

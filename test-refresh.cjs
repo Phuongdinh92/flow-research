@@ -13,6 +13,38 @@ test('successful collection records exact file hash without changing source byte
  const out=await guarded(job,async()=>fs.writeFileSync(path.join(root,'data/new.json'),'{"ok":true}'),root);
  assert.equal(out.status,'ok');assert.equal(out.files[0].bytes,11);assert.match(out.files[0].sha256,/^[a-f0-9]{64}$/);fs.rmSync(root,{recursive:true});
 });
+test('a failed shard pack restores old parts and removes only new parts of its own publication',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'flow-refresh-parts-'));fs.mkdirSync(path.join(root,'data'));
+ const base='data/source.json',files=[base,base+'.gz',base+'.manifest.json'];
+ const originals=new Map([...files,base+'.gz.part-000',base+'.gz.part-001'].map((file,i)=>[file,Buffer.from('old-'+i)]));
+ const unrelated=base+'.gz.part-not-a-number';
+ try{
+  for(const [file,bytes] of originals)fs.writeFileSync(path.join(root,file),bytes);
+  fs.writeFileSync(path.join(root,unrelated),'keep');fs.writeFileSync(path.join(root,'data/other.json.gz.part-000'),'unrelated');
+  const job={id:'fixture',files,validate(){},pack(){
+   fs.writeFileSync(path.join(root,base+'.gz.part-000'),'replacement');fs.unlinkSync(path.join(root,base+'.gz.part-001'));
+   fs.writeFileSync(path.join(root,base+'.gz.part-002'),'new part');fs.writeFileSync(path.join(root,base+'.manifest.json'),'new manifest');
+   throw Error('manifest publication failed');
+  }};
+  const out=await guarded(job,async()=>fs.writeFileSync(path.join(root,base),'new source'),root);
+  assert.equal(out.status,'error');for(const [file,bytes] of originals)assert.deepEqual(fs.readFileSync(path.join(root,file)),bytes);
+  assert.equal(fs.existsSync(path.join(root,base+'.gz.part-002')),false);
+  assert.equal(fs.readFileSync(path.join(root,unrelated),'utf8'),'keep');assert.equal(fs.readFileSync(path.join(root,'data/other.json.gz.part-000'),'utf8'),'unrelated');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('successful shard collection records every current part with its exact bytes and hash',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'flow-refresh-parts-'));fs.mkdirSync(path.join(root,'data'));
+ const base='data/source.json',files=[base,base+'.gz',base+'.manifest.json'];
+ try{
+  const job={id:'fixture',files,validate(){},pack(){
+   fs.writeFileSync(path.join(root,base+'.gz.part-000'),'abc');fs.writeFileSync(path.join(root,base+'.gz.part-001'),'de');fs.writeFileSync(path.join(root,base+'.manifest.json'),'manifest');
+  }};
+  const out=await guarded(job,async()=>fs.writeFileSync(path.join(root,base),'source'),root);
+  assert.equal(out.status,'ok');assert.deepEqual(out.files.map(file=>file.path),[base,base+'.manifest.json',base+'.gz.part-000',base+'.gz.part-001']);
+  assert.deepEqual(out.files.filter(file=>file.path.includes('.part-')).map(file=>file.bytes),[3,2]);
+  assert.equal(out.files.find(file=>file.path.endsWith('part-000')).sha256,'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
 test('selecting either end of a publication chain expands to all of its ordered dependencies',()=>{
  for(const member of GROUPS.research)assert.deepEqual(selectJobs([member]).map(j=>j.id),GROUPS.research);
  for(const member of GROUPS.acquisition)assert.deepEqual(selectJobs([member]).map(j=>j.id),GROUPS.acquisition);
@@ -68,6 +100,18 @@ test('a failed upstream job prevents all downstream work and never marks prior s
   const result=await executePlan({root,jobList,groups,selected:['study'],runJob:async job=>{calls.push(job.id);throw Error('source HTTP 429');}});
   assert.deepEqual(calls,['source']);assert.equal(result.status,'error');assert.deepEqual(result.jobs.map(j=>j.status),['error','skipped','skipped','skipped']);
   for(const [file,bytes]of original)assert.deepEqual(fs.readFileSync(path.join(root,file)),bytes);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('downstream failure rolls back a successful shard generation as a whole',async()=>{
+ const {root,jobList,groups}=transactionFixture(),base='data/source.json.gz';
+ try{
+  fs.writeFileSync(path.join(root,base+'.part-000'),'old first');fs.writeFileSync(path.join(root,base+'.part-001'),'old second');
+  jobList.find(job=>job.id==='source').pack=()=>{fs.writeFileSync(path.join(root,base+'.part-000'),'new first');fs.unlinkSync(path.join(root,base+'.part-001'));fs.writeFileSync(path.join(root,base+'.part-002'),'new third');};
+  const result=await executePlan({root,jobList,groups,selected:['source'],runJob:async job=>{if(job.id==='preview')throw Error('derived mismatch');}});
+  assert.equal(result.status,'error');assert.equal(result.jobs[0].status,'rolled_back');
+  assert.equal(fs.readFileSync(path.join(root,base+'.part-000'),'utf8'),'old first');assert.equal(fs.readFileSync(path.join(root,base+'.part-001'),'utf8'),'old second');
+  assert.equal(fs.existsSync(path.join(root,base+'.part-002')),false);
+  assert.deepEqual(result.jobs[0].retainedFiles.filter(file=>file.path.includes('.part-')).map(file=>file.path),[base+'.part-000',base+'.part-001']);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('all failed jobs still write truthful publishable automation and collection reports with original source bytes',async()=>{

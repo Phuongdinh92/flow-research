@@ -59,7 +59,7 @@ The following describes the v0.9.4 release observations. Published JSON manifest
 | Venue spot/USDT prices | Binance, Bitget, Gate and WhiteBIT; valid/expected instrument counts shown separately | Each row is a venue/instrument identity, not a unique coin. Missing or stale tickers remain explicit. |
 | Aggregated USD markets | Published prices retain 1,000 distinct CoinGecko IDs across four earlier market-cap pages. New full-catalog attempt froze 22,318 IDs: 1,245 attempted = 891 priced + 105 without positive quote + 249 HTTP-error IDs; 21,073 unattempted | The new scan stopped at its first HTTP 429 on batch 5. Old displayed prices and the new incomplete attempt are separate generations. Catalog membership does not establish current price, chain coverage or wallet evidence. |
 | Provider categories | 382 complete category observations from 774 returned records | 392 records lacked required change/timestamp data and were excluded. Categories overlap; representative coin IDs are not complete membership lists. Category market-cap change is not net buying. |
-| Native HBAR history | 30 requested daily observations plus 30D/90D anchors: 32 actual source snapshots | Fully paginated accounts at or above 1 million HBAR, then locally balance-ranked. Mirror Node states have 15-minute source granularity; exact state timestamps are retained. This is not the full holder population. |
+| Native HBAR history | 121 daily source snapshots / 120 adjacent intervals | Fully paginated accounts at or above 1 million HBAR, then locally balance-ranked. Mirror Node states have 15-minute source granularity; exact state timestamps are retained. This is not the full holder population. |
 | TON holders | Top 1,000 accounts each for STON, NOT and DOGS across actual captures | Latest indexed custody balances, not one shared atomic block, beneficial owners or inferred daily history. |
 | Ethereum acquisition sample | 30 receipt-checked selected acquisitions across UNI/LINK/AAVE; four recipient contracts and seven address/token positions with 30 historical balance checkpoints | Largest estimated-USD acquisitions in each provider latest-trades sample. Size-biased and incomplete; no complete intervening Transfer ledger or verified whale identity. Checkpoints are spaced by 7,200 blocks and use actual timestamps, not exact daily trade totals. |
 | Hyperliquid perpetuals | 234 native metadata entries, 178 active; 32 contracts requested over 90 days: 31 have 2,160 hours each, PONS has 1,124; 68,084 observed hours total | Original DEX only, including delisted metadata entries. Excludes HIP-3 DEXs, other venues and trader identities. Open interest is not net new money or a directional position count. |
@@ -98,6 +98,7 @@ python -m http.server 8080
 Open `http://localhost:8080/` in a modern browser with Compression Streams support. The research archive is delivered as gzip plus a manifest; the browser checks compressed/decoded lengths and SHA-256 hashes before accepting its contents.
 
 ```sh
+node pack-data.cjs --materialize data/holder-history-snapshot.json data/source-receipts/hedera-history-20261017-120d.json
 node --test test-*.cjs
 python collect_market.py --self-test
 python -m unittest test_flow
@@ -232,3 +233,9 @@ The four retained October 18 responses were replayed offline to add supply field
 
 
 The October 18 market refresh also retains its five exact public response bodies in `data/source-receipts/coingecko-20261018-0507.json.gz`, with compressed/decoded hashes in the adjacent manifest. Each entry contains the original JSON body string and its URL, HTTP status, byte count, receipt time and SHA-256. Decompress, UTF-8 encode each `body`, and compare its SHA-256 to `receipt.sha256` to replay the original evidence. Normalization timestamps may follow receipt capture by a few milliseconds. This bundle verifies that particular snapshot generation, not later live quotes or provider economic accuracy.
+
+## Radar analysis workspace
+
+The Radar tab groups the wallet-balance overview, exchange buy-share map, price/EMA and taker-flow charts, HBAR holder cohorts, and Ethereum transfer-link graph. Each card retains its own source, units and observation interval. Proprietary A1 scores, valuation bands and cluster ownership rules are not asserted.
+
+HBAR now has 121 consecutive source cutoffs. Large history and receipt files ship as lossless gzip fragments of at most 240,000 bytes, with per-fragment, full compressed and decoded SHA-256 checks. The browser assembles all fragments before validation and display. No rows or precision are removed. `pack-data.cjs --materialize` recreates exact local JSON/gzip audit copies; the fragments and manifests are the versioned source. See `docs/ADVANCED_DATA_COVERAGE.md` for population and missing-account coverage.

@@ -32,3 +32,9 @@ data/research-snapshot.json
 data/coinlore-market.json
 # Derived dated returns are reproduced from the verified archive; gzip ships exact bytes.
 data/market-windows.json
+
+# Lossless multipart transport is canonical; these audit copies are generated.
+data/holder-history-snapshot.json
+data/holder-history-snapshot.json.gz
+data/source-receipts/hedera-history-20261017-120d.json
+data/source-receipts/hedera-history-20261017-120d.json.gz
