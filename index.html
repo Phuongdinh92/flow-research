@@ -8,16 +8,16 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://data-api.binance.vision https://api.bitget.com https://api.gateio.ws https://api.coingecko.com https://tonapi.io wss://data-stream.binance.vision wss://api.gateio.ws wss://ws.bitget.com https://api.coinlore.net; img-src 'self' data: https://c2.coinlore.com https://coin-images.coingecko.com https://assets.coingecko.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <title>Flow Research · Crypto Market Research</title>
 <link rel="stylesheet" href="style.css?v=94">
-<link rel="stylesheet" href="terminal.css?v=91">
+<link rel="stylesheet" href="terminal.css?v=98">
 <link rel="stylesheet" href="market-overview.css?v=96">
-<link rel="stylesheet" href="charts-view.css?v=95">
+<link rel="stylesheet" href="charts-view.css?v=98">
 <link rel="stylesheet" href="cost-reference-view.css?v=95">
-<link rel="stylesheet" href="market-hub.css?v=97">
+<link rel="stylesheet" href="market-hub.css?v=98">
 <link rel="stylesheet" href="radar-view.css?v=96">
 <link rel="stylesheet" href="focus-ui.css?v=95">
 <script defer src="market.js?v=90"></script>
 <script defer src="charts-core.js?v=90"></script>
-<script defer src="charts-view.js?v=96"></script>
+<script defer src="charts-view.js?v=98"></script>
 <script defer src="bubble-view.js?v=97"></script>
 <script defer src="public-data.js?v=93"></script>
 <script defer src="ecosystem.js?v=93"></script>
@@ -31,8 +31,9 @@
 <script defer src="live-gate.js?v=95"></script>
 <script defer src="live-bitget.js?v=95"></script>
 <script defer src="market-windows.js?v=97"></script>
+<script defer src="coingecko-market.js?v=98"></script>
 <script defer src="radar-view.js?v=97"></script>
-<script defer src="market-hub.js?v=97"></script>
+<script defer src="market-hub.js?v=98"></script>
 <script defer src="holders.js?v=90"></script>
 <script defer src="dex-evidence.js?v=90"></script>
 <script defer src="onchain-ui.js?v=96"></script>
@@ -48,12 +49,12 @@
 <script defer src="cost-reference-view.js?v=95"></script>
 <script defer src="live-candle.js?v=96"></script>
 <script defer src="selected-history.js?v=97"></script>
-<script defer src="terminal-ui.js?v=97"></script>
+<script defer src="terminal-ui.js?v=98"></script>
 <script src="navigation.js?v=93" defer></script>
 <script src="operations.js?v=97" defer></script>
 </head>
 <body class="focused-workspace">
-<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.9.7</span></header>
+<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.9.8</span></header>
 <main>
 <div class="workspace-title"><div><span class="eyebrow">FLOW / MARKET WORKSPACE</span><h1>Biểu đồ giá &amp; thị trường altcoin</h1></div><button id="load">Cập nhật giá các sàn ↗</button></div>
 <nav aria-label="Các mục"><button class="tab active" data-panel="terminal">Biểu đồ giá</button><button class="tab" data-panel="market">Bản đồ altcoin</button><details class="nav-more"><summary>Phân tích khác</summary><div><button class="tab" data-panel="research">Bộ lọc giá &amp; lệnh</button><button class="tab" data-panel="onchain">Ví &amp; giao dịch</button><button class="tab" data-panel="evidence">Độ phủ tính năng</button><button class="tab" data-panel="method">Phương pháp</button></div></details></nav>

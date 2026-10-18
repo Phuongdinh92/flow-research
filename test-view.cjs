@@ -191,7 +191,7 @@ test('EMA200 uses the true price axis, hides unseeded values and breaks across m
 test('professional price layout uses right price axis, actual last-value boxes and separate volume pane', () => {
   const series = bars.slice(0, 12).map(b => ({ ...b, sma20: b.close, ema50: b.close * .9, ema200: b.close * .8 }));
   const svg = V.daily(series, { width: 1100, showSma20: false });
-  assert(svg.includes('viewBox="0 0 1100 620"')); assert(svg.includes('chart-price-pro'));
+  assert(svg.includes('viewBox="0 0 1100 520"')); assert(svg.includes('chart-price-pro'));
   assert(!svg.includes('chart-sma20')); assert(svg.includes('chart-ema50')); assert(svg.includes('chart-ema200'));
   const right = Number(svg.match(/data-plot-right="([\d.]+)"/)[1]);
   for (const m of svg.matchAll(/class="chart-tick chart-right-axis" x="([\d.]+)"/g)) assert(Number(m[1]) > right);

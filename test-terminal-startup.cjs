@@ -77,6 +77,7 @@ test('complete terminal startup replaces its placeholder with verified BTC candl
   const until=Date.now()+2000;while(terminal.state.backgroundBusy&&Date.now()<until)await sleep(1);
   assert.equal(terminal.state.initialized,true);assert.equal(terminal.state.preview,true);assert.equal(terminal.state.data.histories['binance:BTCUSDT'].bars.length,401);
   assert.match(nodes.get('terminal-price-body').innerHTML,/chart-price-pro/);assert.doesNotMatch(nodes.get('terminal-price-body').innerHTML,/Đang kiểm tra lịch sử/);
+  assert.match(nodes.get('terminal-price-body').innerHTML,/Giá vốn on-chain · USD/);assert.match(nodes.get('terminal-price-body').innerHTML,/Delta khớp lệnh/);assert.match(nodes.get('terminal-price-body').innerHTML,/<details class="terminal-missing-bands">/);assert.doesNotMatch(nodes.get('terminal-price-body').innerHTML,/chart-legend-chip|class="reference-chip reference-balance"/);
   assert.match(nodes.get('terminal-status').textContent,/Đã hiện BTC/);assert.match(nodes.get('terminal-status').textContent,/Danh mục đầy đủ chưa nạp được/);assert.match(nodes.get('terminal-loading-body').innerHTML,/Quá thời gian chờ/);assert.equal(nodes.get('terminal-reload').disabled,false);
  }finally{terminal?.state.loadController?.abort();for(const [key,descriptor]of previous){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}}
 });

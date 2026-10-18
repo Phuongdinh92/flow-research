@@ -175,7 +175,20 @@
     return dayText + '\n' + (mode === 'cvd' ? 'CVD từ đầu cửa sổ: ' + exact(b.cvd) : 'Taker delta (' + INTERVALS[interval].name + '): ' + exact(b.delta)) + ' USDT\nTaker mua: ' + exact(b.buy) + ' USDT\nTaker bán: ' + exact(b.sell) + ' USDT\nClose: ' + exact(b.close) + ' USDT';
   }
   const priceRegistry = new Map(), priceControllers = new WeakMap(); let priceSequence = 0;
-  function priceValue(value) { if (Math.abs(value) < .0001) return value.toExponential(5); const decimals = Math.abs(value) >= 1 ? 2 : Math.min(12, Math.max(2, 7 - Math.floor(Math.log10(Math.abs(value))))); return value.toLocaleString('en-US', { minimumFractionDigits: Math.min(2, decimals), maximumFractionDigits: decimals }); }
+  function priceValue(value) { if (!finite(value)) return '—'; const magnitude = Math.abs(value); if (magnitude && (magnitude < .0001 || magnitude >= 1e12)) return value.toExponential(5); const decimals = magnitude >= 1 ? 2 : magnitude ? Math.min(12, Math.max(2, 7 - Math.floor(Math.log10(magnitude)))) : 2; return value.toLocaleString('en-US', { minimumFractionDigits: Math.min(2, decimals), maximumFractionDigits: decimals }); }
+  function priceDimensions(width, height) { const w = finite(width) ? Math.max(240, Math.min(8192, Math.round(width))) : 1000, normal = w < 600 ? 400 : w < 900 ? 460 : 520; return { width: w, height: finite(height) ? Math.max(360, Math.min(1000, height)) : normal }; }
+  function layoutPriceLabels(input, { top, bottom, gap = 32 } = {}) {
+    const labels = input.map(value => ({ ...value })).sort((a, b) => a.actualY - b.actualY || String(a.id || a.label).localeCompare(String(b.id || b.label))), half = 15, min = top + half, max = bottom - half;
+    const spacing = labels.length > 1 ? Math.min(gap, Math.max(1, (max - min) / (labels.length - 1))) : gap;
+    for (let i = 0; i < labels.length; i++) labels[i].labelY = Math.max(min, Math.min(max, labels[i].actualY), i ? labels[i - 1].labelY + spacing : min);
+    if (labels.length && labels.at(-1).labelY > max) { labels.at(-1).labelY = max; for (let i = labels.length - 2; i >= 0; i--) labels[i].labelY = Math.min(labels[i].labelY, labels[i + 1].labelY - spacing); }
+    return labels;
+  }
+  function compactPriceReadout(bar, tracks = [], interval = '1d') {
+    const available = tracks.filter(track => finite(track.value) && track.value > 0), time = interval === '1d' ? date(bar.time) + ' UTC' : date(bar.time) + ' → ' + date(bar.end) + ' UTC';
+    const rows = [['O', priceValue(bar.open)], ['H', priceValue(bar.high)], ['L', priceValue(bar.low)], ['C', priceValue(bar.close)], ['Vol', human(bar.quote)]];
+    return '<div class="price-readout-heading"><time>' + esc(time) + '</time><span class="price-readout-state' + (bar.provisional ? ' forming' : '') + '">' + (bar.provisional ? 'Đang hình thành' : 'Đã đóng') + '</span><span class="price-readout-unit">USDT</span></div><dl class="price-readout-values">' + rows.map(([label, value]) => '<div><dt>' + label + '</dt><dd>' + esc(value) + '</dd></div>').join('') + '</dl><div class="price-readout-series">' + available.map(track => '<span class="price-readout-' + (/^[a-z][a-z0-9-]{0,30}$/.test(track.id || '') ? track.id : 'reference') + '">' + esc(track.label) + ' <b>' + esc(priceValue(track.value)) + '</b></span>').join('') + '</div>';
+  }
   function updatedViewport(previous, next, lo, hi) {
     if (!next.length) return { lo: 0, hi: 0 };
     const count = Math.max(1, hi - lo);
@@ -186,10 +199,20 @@
     let last = next.findIndex(b => b.time > to); if (last < 0) last = next.length;
     return { lo: first, hi: Math.max(first + 1, last) };
   }
+  function restoredViewport(bars, view) {
+    if (!bars.length) return { lo: 0, hi: 0, selected: 0, inspecting: false };
+    const count = Math.max(1, Math.min(bars.length, Number.isInteger(view?.count) ? view.count : bars.length)); let lo = 0, hi = bars.length;
+    if (view && !view.full) {
+      if (view.pinned) lo = Math.max(0, bars.length - count);
+      else { lo = bars.findIndex(bar => bar.time >= view.from); if (lo < 0) lo = Math.max(0, bars.length - count); hi = bars.findIndex(bar => bar.end > view.to); if (hi < 0) hi = bars.length; hi = Math.max(lo + 1, hi); }
+    }
+    const selectedIndex = view?.inspecting ? bars.findIndex(bar => bar.time === view.selectedTime) : -1, inspecting = selectedIndex >= lo && selectedIndex < hi;
+    return { lo, hi, selected: inspecting ? selectedIndex - lo : hi - lo - 1, inspecting };
+  }
   function priceDaily(bars, options) {
-    const { width, interval, height = 620, showSma20 = true, showEma50 = true, showEma200 = true, showLatestLabels = true, priceTracks = [] } = options;
-    const w = widthOf(width), h = finite(height) ? Math.max(420, Math.min(1000, height)) : 620;
-    const left = w < 420 ? 13 : 25, right = w - (w < 420 ? 68 : 92), plotWidth = right - left;
+    const { width, interval, height, showSma20 = true, showEma50 = true, showEma200 = true, showLatestLabels = true, showLegend = true, priceTracks = [] } = options;
+    const dimensions = priceDimensions(width, height), w = dimensions.width;
+    const left = w < 420 ? 12 : 22, right = w - (w < 500 ? 112 : 144), plotWidth = right - left;
     const legendColumns = Math.max(1, Math.floor(plotWidth / 122));
     const definitions = [
       { field: 'sma20', css: 'chart-sma20', label: 'SMA20 ngày', shortLabel: 'SMA20', color: '#65aaf3', enabled: showSma20 },
@@ -211,29 +234,31 @@
       if (values.some(v => finite(v) && v > 0)) { tracks.push({ id: candidate.id, css: 'chart-level-' + candidate.id, label: candidate.label, shortLabel: candidate.label, color: candidate.color, values }); trackIds.add(candidate.id); }
     }
     for (const indicator of definitions) if (indicator.enabled && bars.some(b => finite(b[indicator.field]) && b[indicator.field] > 0)) tracks.push({ ...indicator, id: indicator.field, values: bars.map(b => b[indicator.field]) });
-    const legendRows = Math.max(1, Math.ceil(tracks.length / legendColumns));
-    const top = 32 + legendRows * 22, bottom = Math.max(top + 135, h - 155), vTop = bottom + 28, vBottom = h - 43;
+    const legendRows = showLegend ? Math.max(1, Math.ceil(tracks.length / legendColumns)) : 0;
+    const h = Math.max(dimensions.height, Math.min(1000, (tracks.length + 1) * 32 + 160 + legendRows * 22));
+    const top = showLegend ? 32 + legendRows * 22 : 22, bottom = Math.max(top + 120, h - 135), vTop = bottom + 24, vBottom = h - 43;
     const firstTime = bars[0].time, endTime = bars.at(-1).end + 1, dataSpan = Math.max(DAY, endTime - firstTime), span = dataSpan * 1.045;
     const at = time => left + (time - firstTime) / span * plotWidth, center = b => at((b.time + b.end + 1) / 2);
     const candleWidth = b => Math.max(0.65, Math.min(22, (b.end + 1 - b.time) / span * plotWidth * 0.7));
     const y = scale(bars.flatMap(b => [b.low, b.high]).concat(tracks.flatMap(t => t.values.filter(v => finite(v) && v > 0))), bottom, top, { nonnegative: true, padding: 0.055 });
     const volumes = scale(bars.map(b => b.quote), vBottom, vTop, { includeZero: true, nonnegative: true, padding: 0 });
     const token = 'price-' + (++priceSequence), title = 'Nến OHLC và giá trị giao dịch ' + INTERVALS[interval].name + ' UTC';
-    let svg = begin(w, h, title, 'Giá và các đường giá được cung cấp dùng cùng trục bên phải. Chỉ vẽ giá trị đã có dữ liệu; không nối qua kỳ bị thiếu. Khối lượng quote nằm trong ô riêng. Chọn biểu đồ để dùng phím mũi tên hoặc phóng to.').replace('class="chart-svg"', 'class="chart-svg chart-price-pro" data-price-chart="' + token + '" data-plot-left="' + left + '" data-plot-right="' + right + '" data-plot-top="' + top + '" data-plot-bottom="' + vBottom + '"');
+    const size = h !== priceDimensions(w).height ? 'custom' : w < 600 ? 'mobile' : w < 900 ? 'tablet' : 'desktop';
+    let svg = begin(w, h, title, 'Giá và các đường giá được cung cấp dùng cùng trục bên phải. Chỉ vẽ giá trị đã có dữ liệu; không nối qua kỳ bị thiếu. Khối lượng quote nằm trong ô riêng. Chọn biểu đồ để dùng phím mũi tên hoặc phóng to.').replace('class="chart-svg"', 'class="chart-svg chart-price-pro" height="' + h + '" data-chart-size="' + size + '" data-price-chart="' + token + '" data-plot-left="' + left + '" data-plot-right="' + right + '" data-plot-top="' + top + '" data-plot-bottom="' + vBottom + '" data-price-bottom="' + bottom + '"');
     svg += '<rect class="chart-plot-background" x="' + left + '" y="' + top + '" width="' + plotWidth + '" height="' + (vBottom - top) + '"/>';
     const gridTicks = Math.max(2, Math.min(7, Math.floor(plotWidth / 125)));
     for (let i = 0; i <= gridTicks; i++) {
       const x = left + i / gridTicks * (at(endTime) - left), stamp = firstTime + i / gridTicks * (endTime - firstTime);
       svg += line(x, top, x, vBottom, 'chart-grid chart-grid-vertical') + text(x, h - 22, new Date(stamp).toISOString().slice(5, 10), 'chart-tick');
     }
-    for (const tick of y.ticks) svg += line(left, tick.coordinate, right, tick.coordinate) + text(right + 9, tick.coordinate + 4, human(tick.value), 'chart-tick chart-right-axis', 'start');
+    for (const tick of y.ticks) svg += line(left, tick.coordinate, right, tick.coordinate) + text(right + 9, tick.coordinate + 4, priceValue(tick.value), 'chart-tick chart-right-axis', 'start');
     svg += line(right, top, right, vBottom, 'chart-axis-border') + line(left, vTop - 12, right, vTop - 12, 'chart-axis-border');
     svg += text(right + 9, top - 12, 'USDT', 'chart-axis-label', 'start') + text(left, vTop - 16, INTERVALS[interval].volume, 'chart-axis-label', 'start');
     svg += text(right + 9, vTop + 5, human(volumes.ticks.at(-1).value), 'chart-tick', 'start') + text(right + 9, vBottom + 4, '0', 'chart-tick', 'start');
     bars.forEach((b, index) => {
       const cx = center(b), open = y.map(b.open), close = y.map(b.close), barWidth = candleWidth(b);
       const readout = barTitle(b, 'price', interval) + (b.sourceSessionClosed ? '\nNến đã đóng nhận trong phiên trực tiếp · chưa ghi vào nghiên cứu' : '') + (b.provisional ? '\nNến đang hình thành · chưa dùng nghiên cứu\nSự kiện kline: ' + new Date(b.eventTime).toISOString() : '') + tracks.filter(t => finite(t.values[index])).map(t => '\n' + t.label + ': ' + exact(t.values[index]) + ' USDT').join('');
-      svg += '<g class="chart-candle ' + direction(b.close - b.open) + (b.provisional ? ' chart-candle-provisional' : '') + '" data-provisional="' + !!b.provisional + '" data-price-sample="' + index + '" data-chart-x="' + coord(cx) + '" data-chart-y="' + coord(close) + '" data-chart-date="' + esc(date(b.end)) + '"><title>' + esc(readout) + '</title>' + line(cx, y.map(b.high), cx, y.map(b.low), 'chart-wick') + '<rect class="chart-candle-body" x="' + coord(cx - barWidth / 2) + '" y="' + coord(Math.min(open, close)) + '" width="' + coord(barWidth) + '" height="' + coord(Math.max(0.8, Math.abs(close - open))) + '"/><rect class="chart-volume" x="' + coord(cx - barWidth / 2) + '" y="' + coord(volumes.map(b.quote)) + '" width="' + coord(barWidth) + '" height="' + coord(vBottom - volumes.map(b.quote)) + '"/></g>';
+      svg += '<g class="chart-candle ' + direction(b.close - b.open) + (b.provisional ? ' chart-candle-provisional' : '') + '" data-provisional="' + !!b.provisional + '" data-price-sample="' + index + '" data-chart-x="' + coord(cx) + '" data-chart-y="' + coord(close) + '" data-chart-date="' + esc(date(b.end)) + '" data-chart-time="' + b.time + '"><title>' + esc(readout) + '</title>' + line(cx, y.map(b.high), cx, y.map(b.low), 'chart-wick') + '<rect class="chart-candle-body" x="' + coord(cx - barWidth / 2) + '" y="' + coord(Math.min(open, close)) + '" width="' + coord(barWidth) + '" height="' + coord(Math.max(0.8, Math.abs(close - open))) + '"/><rect class="chart-volume" x="' + coord(cx - barWidth / 2) + '" y="' + coord(volumes.map(b.quote)) + '" width="' + coord(barWidth) + '" height="' + coord(vBottom - volumes.map(b.quote)) + '"/></g>';
     });
     const latestLabels = [];
     tracks.forEach((track, index) => {
@@ -246,30 +271,29 @@
       });
       svg += '<path class="' + track.css + '" d="' + path.trim() + '" stroke="' + track.color + '"/>';
       bars.forEach((b, i) => { if (finite(track.values[i]) && track.values[i] > 0) svg += '<circle class="' + track.css + ' chart-indicator-sample" cx="' + coord(center(b)) + '" cy="' + coord(y.map(track.values[i])) + '" r="1.8"><title>' + esc(date(b.end) + ' UTC · ' + track.label + ': ' + exact(track.values[i]) + ' USDT') + '</title></circle>'; });
-      const legendX = left + index % legendColumns * Math.min(148, plotWidth / legendColumns), legendY = 18 + Math.floor(index / legendColumns) * 22;
-      svg += '<rect class="chart-legend-chip" x="' + coord(legendX - 6) + '" y="' + coord(legendY - 12) + '" width="' + Math.min(140, plotWidth / legendColumns - 5) + '" height="20" rx="10" stroke="' + track.color + '" fill="' + track.color + '12"/>';
-      svg += '<circle cx="' + coord(legendX + 4) + '" cy="' + coord(legendY - 2) + '" r="2.4" fill="' + track.color + '"/>' + text(legendX + 12, legendY + 1, track.label, 'chart-indicator-label ' + track.css + '-label', 'start');
-      if (finite(track.values.at(-1)) && track.values.at(-1) > 0) latestLabels.push({ label: track.shortLabel, color: track.color, value: track.values.at(-1), actualY: y.map(track.values.at(-1)) });
+      if (showLegend) {
+        const legendX = left + index % legendColumns * Math.min(148, plotWidth / legendColumns), legendY = 18 + Math.floor(index / legendColumns) * 22;
+        svg += '<rect class="chart-legend-chip" x="' + coord(legendX - 6) + '" y="' + coord(legendY - 12) + '" width="' + Math.min(140, plotWidth / legendColumns - 5) + '" height="20" rx="10" stroke="' + track.color + '" fill="' + track.color + '12"/>';
+        svg += '<circle cx="' + coord(legendX + 4) + '" cy="' + coord(legendY - 2) + '" r="2.4" fill="' + track.color + '"/>' + text(legendX + 12, legendY + 1, track.label, 'chart-indicator-label ' + track.css + '-label', 'start');
+      }
+      if (finite(track.values.at(-1)) && track.values.at(-1) > 0) latestLabels.push({ id: track.id, label: track.shortLabel, color: track.color, value: track.values.at(-1), actualY: y.map(track.values.at(-1)) });
     });
     // Labels retain their true value while leaders separate crowded levels.
     if (showLatestLabels) {
       const last = bars.at(-1), priceY = y.map(last.close);
-      svg += line(left, priceY, right, priceY, 'chart-latest-price-line') + '<rect class="chart-current-price-box" x="' + (right + 1) + '" y="' + coord(priceY - 9) + '" width="' + (w - right - 5) + '" height="18" rx="2"/>' + text(right + 7, priceY + 4, priceValue(last.close), 'chart-current-price-value', 'start');
-      latestLabels.sort((a, b) => a.actualY - b.actualY);
-      let previous = top - 19;
-      for (const label of latestLabels) { label.labelY = Math.max(label.actualY, previous + 19); previous = label.labelY; }
-      const overflow = latestLabels.length ? Math.max(0, latestLabels.at(-1).labelY - bottom) : 0;
-      for (const label of latestLabels) {
-        const labelY = label.labelY - overflow, labelText = label.label + ' ' + human(label.value), boxWidth = Math.min(plotWidth * .76, Math.max(72, labelText.length * 5.6 + 12));
-        svg += '<g class="chart-end-label"><title>' + esc(label.label + ': ' + exact(label.value) + ' USDT') + '</title><path class="chart-label-leader" d="M' + coord(center(last)) + ',' + coord(label.actualY) + ' L' + coord(right - boxWidth - 8) + ',' + coord(labelY) + '" stroke="' + label.color + '"/><rect x="' + coord(right - boxWidth - 2) + '" y="' + coord(labelY - 9) + '" width="' + coord(boxWidth) + '" height="18" rx="2" fill="' + label.color + '"/>' + text(right - 8, labelY + 4, labelText, 'chart-end-label-text', 'end') + '</g>';
+      svg += line(left, priceY, right, priceY, 'chart-latest-price-line');
+      latestLabels.push({ id: 'price', label: last.provisional ? 'Giá · đang chạy' : 'Giá đóng', color: '#35bbc8', value: last.close, actualY: priceY });
+      for (const label of layoutPriceLabels(latestLabels, { top, bottom })) {
+        const labelY = label.labelY, boxX = right + 7, boxWidth = w - boxX - 7, current = label.id === 'price';
+        svg += '<g class="chart-end-label' + (current ? ' chart-price-last' : '') + '" data-price-level="' + esc(label.id) + '" data-actual-y="' + coord(label.actualY) + '" data-label-y="' + coord(labelY) + '"><title>' + esc(label.label + ': ' + exact(label.value) + ' USDT') + '</title><path class="chart-label-leader" d="M' + coord(center(last)) + ',' + coord(label.actualY) + ' L' + (right + 3) + ',' + coord(label.actualY) + ' L' + boxX + ',' + coord(labelY) + '" stroke="' + label.color + '"/><rect' + (current ? ' class="chart-current-price-box"' : '') + ' x="' + boxX + '" y="' + coord(labelY - 15) + '" width="' + boxWidth + '" height="30" rx="3" fill="' + label.color + '"/>' + text(boxX + 7, labelY - 4, short(label.label, Math.max(6, Math.floor((boxWidth - 14) / 6))), 'chart-end-label-name', 'start') + text(boxX + 7, labelY + 9, priceValue(label.value), current ? 'chart-current-price-value' : 'chart-end-label-text', 'start') + '</g>';
       }
     }
     svg += text(left, h - 5, date(firstTime), 'chart-period-label', 'start') + text(right, h - 5, date(bars.at(-1).end) + ' · ' + INTERVALS[interval].axis, 'chart-period-label', 'end');
     svg += '<g class="chart-crosshair" hidden aria-hidden="true"><line class="chart-crosshair-v"/><line class="chart-crosshair-h"/><circle r="3"/></g>';
-    priceRegistry.set(token, { bars, options }); if (priceRegistry.size > 64) priceRegistry.delete(priceRegistry.keys().next().value);
+    priceRegistry.set(token, { bars, options, tracks }); if (priceRegistry.size > 64) priceRegistry.delete(priceRegistry.keys().next().value);
     return svg + '</svg>';
   }
-  function daily(input, { mode = 'price', width, interval = '1d', height, showSma20 = true, showEma50 = true, showEma200 = true, priceTracks = [], showLatestLabels = true } = {}) {
+  function daily(input, { mode = 'price', width, interval = '1d', height, showSma20 = true, showEma50 = true, showEma200 = true, priceTracks = [], showLatestLabels = true, showLegend = true } = {}) {
     const series = Array.isArray(input) ? input : input && input.series;
     if (!['price', 'delta', 'cvd'].includes(mode)) return empty('Loại biểu đồ lịch sử không được hỗ trợ.');
     if (!Object.prototype.hasOwnProperty.call(INTERVALS, interval)) return empty('Khung nến không được hỗ trợ.');
@@ -277,7 +301,7 @@
     if (series.some(b => !b || !['time', 'end', 'open', 'high', 'low', 'close', 'quote'].every(k => finite(b[k])) || b.time < 946684800000 || b.end >= 4102444800000 || b.end < b.time || Math.min(b.open, b.high, b.low, b.close) <= 0 || b.quote < 0 || b.high < Math.max(b.open, b.close, b.low) || b.low > Math.min(b.open, b.close, b.high))) return empty('Nến lịch sử không hợp lệ; chưa vẽ biểu đồ.');
     if (mode !== 'price' && series.some(b => !['buy', 'sell', 'delta', 'cvd'].every(k => finite(b[k])))) return empty('Nguồn hoặc cửa sổ này chưa có đầy đủ dữ liệu taker mua/bán. Chưa thể tính ' + (mode === 'delta' ? 'delta' : 'CVD') + '; không thay dữ liệu thiếu bằng 0.');
     const bars = [...series].sort((a, b) => a.time - b.time);
-    if (mode === 'price') return priceDaily(bars, { width, interval, height, showSma20, showEma50, showEma200, priceTracks, showLatestLabels });
+    if (mode === 'price') return priceDaily(bars, { width, interval, height, showSma20, showEma50, showEma200, priceTracks, showLatestLabels, showLegend });
     const indicators = [ { field: 'sma20', css: 'chart-sma20', label: 'SMA20 ngày' }, { field: 'ema50', css: 'chart-ema50', label: 'EMA50 ngày' }, { field: 'ema200', css: 'chart-ema200', label: 'EMA200 ngày' } ].filter(indicator => mode === 'price' && bars.some(b => finite(b[indicator.field]) && b[indicator.field] > 0));
     const w = widthOf(width), left = w < 420 ? 61 : 77, right = w - (mode === 'delta' ? (w < 420 ? 59 : 78) : 23), top = 40;
     const plotWidth = right - left, legendColumns = Math.max(1, Math.min(indicators.length, Math.floor(plotWidth / 95))), legendExtra = mode === 'price' ? Math.max(0, Math.ceil(indicators.length / legendColumns) - 1) * 14 : 0;
@@ -337,68 +361,79 @@
     for (const initial of charts) {
       if (initial.dataset.priceBound) continue;
       const registered = priceRegistry.get(initial.dataset.priceChart); if (!registered) continue;
-      let base = registered.bars; const options = registered.options;
+      let base = registered.bars, model = registered; const options = { ...registered.options };
       const shell = document.createElement('div'); shell.className = 'price-chart-shell'; initial.parentNode.insertBefore(shell, initial); shell.appendChild(initial);
+      const readout = document.createElement('div'); readout.className = 'price-chart-tooltip price-chart-readout'; readout.setAttribute('role', 'group'); readout.setAttribute('aria-label', 'Số liệu nến đang chọn'); shell.insertBefore(readout, initial);
       const controls = document.createElement('div'); controls.className = 'price-chart-navigation';
-      controls.innerHTML = '<span>Rê chuột để đọc · kéo để dịch</span><button type="button" data-price-zoom="out" aria-label="Thu nhỏ biểu đồ">−</button><button type="button" data-price-zoom="in" aria-label="Phóng to biểu đồ">+</button><button type="button" data-price-zoom="reset">Đặt lại</button>';
+      controls.innerHTML = '<span>Rê chuột để đọc · kéo để dịch</span><details class="price-chart-exact"><summary>Số đầy đủ</summary><pre></pre></details><button type="button" data-price-zoom="out" aria-label="Thu nhỏ biểu đồ">−</button><button type="button" data-price-zoom="in" aria-label="Phóng to biểu đồ">+</button><button type="button" data-price-zoom="reset">Đặt lại</button>';
       shell.appendChild(controls);
-      const tooltip = document.createElement('div'); tooltip.className = 'price-chart-tooltip'; tooltip.hidden = true; shell.appendChild(tooltip);
-      let svg = initial, lo = 0, hi = base.length, selected = Math.max(0, base.length - 1), drag = null, pendingUpdate = null, lastClientX;
-      function updateControls() { controls.querySelector('[data-price-zoom="in"]').disabled = hi - lo <= Math.min(8, base.length); controls.querySelector('[data-price-zoom="out"]').disabled = hi - lo >= base.length; }
-      function show(index, clientX) {
-        if (clientX !== undefined) lastClientX = clientX;
+      let svg = initial, lo = 0, hi = base.length, selected = Math.max(0, base.length - 1), inspecting = false, drag = null, pendingUpdate = null, pendingResize = false, observer = null, disposed = false;
+      const fallbackResize = () => resize();
+      function updateControls() { controls.querySelector('[data-price-zoom="in"]').disabled = hi - lo <= Math.min(8, base.length); controls.querySelector('[data-price-zoom="out"]').disabled = hi - lo >= base.length; svg.dataset.viewFrom = String(base[lo]?.time ?? ''); svg.dataset.viewTo = String(base[hi - 1]?.end ?? ''); }
+      function show(index, inspect = true) {
         const samples = svg.querySelectorAll('[data-price-sample]'); if (!samples.length) return;
-        selected = Math.max(0, Math.min(samples.length - 1, index));
+        selected = Math.max(0, Math.min(samples.length - 1, index)); inspecting = inspect;
         const node = samples[selected], x = Number(node.dataset.chartX), y = Number(node.dataset.chartY), cross = svg.querySelector('.chart-crosshair');
+        readout.innerHTML = compactPriceReadout(model.bars[selected], model.tracks.map(track => ({ id: track.id, label: track.shortLabel || track.label, value: track.values[selected] })), options.interval); controls.querySelector('.price-chart-exact pre').textContent = node.querySelector('title').textContent; svg.dataset.selectedTime = node.dataset.chartTime; svg.dataset.inspecting = String(inspecting);
+        if (!inspect) { cross.hidden = true; cross.setAttribute('hidden', ''); return; }
         cross.hidden = false; cross.removeAttribute('hidden');
         const vertical = cross.querySelector('.chart-crosshair-v'), horizontal = cross.querySelector('.chart-crosshair-h');
         for (const [attribute, value] of Object.entries({ x1: x, x2: x, y1: svg.dataset.plotTop, y2: svg.dataset.plotBottom })) vertical.setAttribute(attribute, value);
         for (const [attribute, value] of Object.entries({ x1: svg.dataset.plotLeft, x2: svg.dataset.plotRight, y1: y, y2: y })) horizontal.setAttribute(attribute, value);
         cross.querySelector('circle').setAttribute('cx', x); cross.querySelector('circle').setAttribute('cy', y);
-        tooltip.textContent = node.querySelector('title').textContent; tooltip.hidden = false;
-        const shellBox = shell.getBoundingClientRect();
-        tooltip.style.left = clientX && clientX - shellBox.left < shellBox.width * .52 ? 'auto' : '12px'; tooltip.style.right = clientX && clientX - shellBox.left < shellBox.width * .52 ? '12px' : 'auto';
       }
       function redraw(preserveReadout = false) {
-        const hadFocus = document.activeElement === svg, hadTip = preserveReadout && !tooltip.hidden;
+        const hadFocus = document.activeElement === svg, wasInspecting = preserveReadout && inspecting;
         const holder = document.createElement('div'); holder.innerHTML = daily(base.slice(lo, hi), { ...options, mode: 'price' });
-        const next = holder.firstElementChild; svg.replaceWith(next); svg = next; tooltip.hidden = true; attach(); updateControls();
-        if (hadTip) show(selected, lastClientX); if (hadFocus) svg.focus({ preventScroll: true });
+        const next = holder.firstElementChild; model = priceRegistry.get(next.dataset.priceChart); svg.replaceWith(next); svg = next; attach(); updateControls();
+        show(wasInspecting ? selected : hi - lo - 1, wasInspecting); if (hadFocus) svg.focus({ preventScroll: true });
       }
       function update(next) {
-        if (!Array.isArray(next) || !next.length) return false;
+        if (!Array.isArray(next) || !next.length || disposed) return false;
         if (drag) { pendingUpdate = next; return true; }
-        const selectedTime = base[lo + selected]?.time, view = updatedViewport(base, next, lo, hi);
+        const selectedTime = inspecting ? base[lo + selected]?.time : null, view = updatedViewport(base, next, lo, hi);
         base = next.slice(); lo = view.lo; hi = view.hi;
-        const index = base.findIndex(b => b.time === selectedTime); selected = Math.max(0, Math.min(hi - lo - 1, index < 0 ? hi - lo - 1 : index - lo));
+        const index = selectedTime === null ? -1 : base.findIndex(bar => bar.time === selectedTime); selected = Math.max(0, Math.min(hi - lo - 1, index < 0 ? hi - lo - 1 : index - lo));
         redraw(true); return true;
       }
       function zoom(factor) {
         const count = hi - lo, wanted = Math.min(base.length, Math.max(Math.min(8, base.length), Math.round(count * factor)));
         const anchor = lo + Math.min(count - 1, Math.max(0, selected)), ratio = count <= 1 ? 1 : selected / (count - 1);
-        lo = Math.max(0, Math.min(base.length - wanted, Math.round(anchor - wanted * ratio))); hi = lo + wanted; selected = Math.min(wanted - 1, Math.round(wanted * ratio)); redraw();
+        lo = Math.max(0, Math.min(base.length - wanted, Math.round(anchor - wanted * ratio))); hi = lo + wanted; selected = Math.min(wanted - 1, Math.round(wanted * ratio)); redraw(true);
       }
+      function destroy() { if (disposed) return; disposed = true; observer?.disconnect(); globalThis.removeEventListener?.('resize', fallbackResize); priceControllers.delete(shell); }
+      function resize() {
+        if (disposed) return false;
+        if (shell.isConnected === false) { destroy(); return false; }
+        if (shell.closest?.('[hidden]')) return false;
+        const measured = shell.getBoundingClientRect?.().width || shell.clientWidth; if (!finite(measured) || measured < 2) return false;
+        if (drag) { pendingResize = true; return true; }
+        const width = priceDimensions(measured).width; if (Math.abs(width - (options.width || 1000)) < 1) return false;
+        options.width = width; redraw(true); return true;
+      }
+      function snapshot() { return { interval: options.interval, from: base[lo]?.time ?? null, to: base[hi - 1]?.end ?? null, count: hi - lo, full: lo === 0 && hi === base.length, pinned: hi === base.length, selectedTime: inspecting ? base[lo + selected]?.time ?? null : null, inspecting }; }
+      function restore(view) { if (!view || view.interval !== options.interval || disposed) return false; const restored = restoredViewport(base, view); lo = restored.lo; hi = restored.hi; selected = restored.selected; inspecting = restored.inspecting; redraw(true); return true; }
       function attach() {
         svg.dataset.priceBound = 'true'; svg.setAttribute('tabindex', '0');
-        svg.setAttribute('aria-label', 'Biểu đồ giá tương tác. Mũi tên đọc nến; cộng trừ để zoom; Home đặt lại.');
+        svg.setAttribute('aria-label', 'Biểu đồ giá tương tác. Số liệu nến ở phía trên; mũi tên đọc nến; cộng trừ để zoom; Home đặt lại.');
         svg.addEventListener('pointermove', event => {
           const box = svg.getBoundingClientRect(), view = svg.viewBox.baseVal, x = (event.clientX - box.left) / box.width * view.width;
           const samples = Array.from(svg.querySelectorAll('[data-price-sample]'));
-          if (x < Number(svg.dataset.plotLeft) || x > Number(svg.dataset.plotRight)) return;
+          if (!samples.length || x < Number(svg.dataset.plotLeft) || x > Number(svg.dataset.plotRight)) return;
           let nearest = 0; for (let i = 1; i < samples.length; i++) if (Math.abs(Number(samples[i].dataset.chartX) - x) < Math.abs(Number(samples[nearest].dataset.chartX) - x)) nearest = i;
-          show(nearest, event.clientX);
+          show(nearest);
         });
-        svg.addEventListener('pointerleave', () => { tooltip.hidden = true; svg.querySelector('.chart-crosshair').setAttribute('hidden', ''); });
-        svg.addEventListener('pointerdown', event => { if (event.button === 0 && hi - lo < base.length) drag = { x: event.clientX, lo, hi }; });
+        svg.addEventListener('pointerleave', () => { if (!drag) show(hi - lo - 1, false); });
+        svg.addEventListener('pointerdown', event => { if (event.button === 0 && hi - lo < base.length) { drag = { x: event.clientX, lo, hi }; svg.setPointerCapture?.(event.pointerId); } });
         svg.addEventListener('pointerup', event => {
           if (!drag) return;
           const shift = Math.round((drag.x - event.clientX) / svg.getBoundingClientRect().width * (hi - lo)), count = drag.hi - drag.lo;
-          if (Math.abs(event.clientX - drag.x) > 8) { lo = Math.max(0, Math.min(base.length - count, drag.lo + shift)); hi = lo + count; redraw(); } drag = null;
+          const moved = Math.abs(event.clientX - drag.x) > 8; if (moved) { lo = Math.max(0, Math.min(base.length - count, drag.lo + shift)); hi = lo + count; } drag = null;
+          if (moved) redraw(true); if (pendingResize) { pendingResize = false; resize(); }
           if (pendingUpdate) { const next = pendingUpdate; pendingUpdate = null; update(next); }
         });
+        svg.addEventListener('pointercancel', () => { drag = null; if (pendingResize) { pendingResize = false; resize(); } if (pendingUpdate) { const next = pendingUpdate; pendingUpdate = null; update(next); } });
         svg.addEventListener('keydown', event => {
-          // Existing callers may also expose focusable candle samples with
-          // their own keyboard navigation; do not process those twice.
           if (event.target !== svg) return;
           if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); show(selected + (event.key === 'ArrowLeft' ? -1 : 1)); }
           else if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(.65); svg.focus(); }
@@ -408,14 +443,27 @@
         svg.addEventListener('wheel', event => { if (document.activeElement !== svg) return; event.preventDefault(); zoom(event.deltaY < 0 ? .8 : 1.25); svg.focus(); }, { passive: false });
       }
       controls.addEventListener('click', event => { const action = event.target.closest('[data-price-zoom]')?.dataset.priceZoom; if (action === 'in') zoom(.65); else if (action === 'out') zoom(1.6); else if (action === 'reset') { lo = 0; hi = base.length; redraw(); } });
-      priceControllers.set(shell, { update });
-      attach(); updateControls();
+      priceControllers.set(shell, { update, resize, destroy, snapshot, restore }); attach(); updateControls(); show(hi - lo - 1, false);
+      if (typeof globalThis.ResizeObserver === 'function') { observer = new ResizeObserver(() => resize()); observer.observe(shell); } else globalThis.addEventListener?.('resize', fallbackResize);
+      resize();
     }
   }
+  function resizeDaily(container) {
+    if (!container) return false;
+    const shells = container.matches?.('.price-chart-shell') ? [container] : Array.from(container.querySelectorAll?.('.price-chart-shell') || []);
+    let resized = false; for (const shell of shells) if (priceControllers.get(shell)?.resize()) resized = true; return resized;
+  }
+  function destroyDaily(container) {
+    if (!container) return;
+    const shells = container.matches?.('.price-chart-shell') ? [container] : Array.from(container.querySelectorAll?.('.price-chart-shell') || []);
+    for (const shell of shells) priceControllers.get(shell)?.destroy();
+  }
+  function captureDaily(container) { if (!container) return null; const shell = container.matches?.('.price-chart-shell') ? container : container.querySelector?.('.price-chart-shell'); return priceControllers.get(shell)?.snapshot() || null; }
+  function restoreDaily(container, view) { if (!container || !view) return false; const shell = container.matches?.('.price-chart-shell') ? container : container.querySelector?.('.price-chart-shell'); return priceControllers.get(shell)?.restore(view) || false; }
   function updateDaily(container, series) {
     if (!container || !Array.isArray(series) || !series.length) return false;
     const shells = container.matches?.('.price-chart-shell') ? [container] : Array.from(container.querySelectorAll?.('.price-chart-shell') || []);
     let updated = false; for (const shell of shells) if (priceControllers.get(shell)?.update(series)) updated = true; return updated;
   }
-  return Object.freeze({ scatter, bubble, daily, bindInteraction, updateDaily, updatedViewport });
+  return Object.freeze({ scatter, bubble, daily, bindInteraction, updateDaily, resizeDaily, destroyDaily, captureDaily, restoreDaily, updatedViewport, restoredViewport, priceValue, priceDimensions, layoutPriceLabels, compactPriceReadout });
 });
