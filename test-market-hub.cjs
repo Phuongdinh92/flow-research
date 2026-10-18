@@ -65,4 +65,26 @@ test('CoinGecko countertrend requires Bitcoin from the exact source body and ref
 
 test('verified CoinGecko contract search resolves by exact catalog ID without replacing the quote or clock',()=>{const g=actualCG(),q=g.rows.find(r=>r.id==='quack-ai'),address='0xc07e1300dc138601fa6b0b59f8d0fa477e690589',catalog=g.catalog.map(r=>r.id===q.id?{...r,platforms:{ethereum:address}}:r),withCatalog={...g,catalog,sourceCatalog:{before:{sha256:'d'.repeat(64),url:'https://api.coingecko.com/api/v3/coins/list?include_platform=true'}}},f=H.selectFrame({coingecko:withCatalog,source:'coingecko',query:address,rankLimit:100,now});assert.equal(f.matchingCatalog,1);assert.equal(f.points.length,1);assert.equal(f.points[0].key,'coingecko:quack-ai');assert.equal(f.points[0].last,q.priceUsd);assert.equal(f.points[0].asOf,q.providerUpdatedAt);assert.equal(f.points[0].platforms.ethereum,address);});
 
+test('a halted CoinGecko scan after996 of22335 IDs never presents its retained partial coverage as actively scanning',()=>{
+ const snapshot={coverage:{scope:'active_catalog_frozen_at_start',expectedCount:22335,attemptedCount:996,pricedCount:990,noQuoteCount:2,missingCount:4,unattemptedCount:21339,frozenCatalogComplete:false},sourceCatalog:{before:{receivedAt:now-120000}}},before=JSON.stringify(snapshot),collecting={state:'collecting',progress:{phase:'prices'}};
+ assert.match(H.coingeckoScopeState({snapshot,status:collecting}),/Đang quét lần lượt/);
+ for(const status of [{state:'blocked',reason:'Failed to fetch'},{state:'collecting',blocked:true}]){const stopped=H.coingeckoScopeState({snapshot,status});assert.match(stopped,/đã dừng/);assert.doesNotMatch(stopped,/Đang quét|Đã đọc hết/);assert.match(stopped,/giữ dữ liệu đã nhận và thời điểm nguồn/);}
+ const paused=H.coingeckoScopeState({snapshot,status:collecting,paused:true});assert.match(paused,/tạm dừng/);assert.doesNotMatch(paused,/Đang quét/);
+ assert.equal(JSON.stringify(snapshot),before);
+});
+test('CoinGecko initial-catalog failure is distinct from loading or an active catalog request',()=>{
+ const snapshot={coverage:{scope:'saved_top_market_cap_ids',expectedCount:1000}},blocked=H.coingeckoScopeState({snapshot,status:{state:'blocked'}});
+ assert.match(blocked,/Chưa đọc được danh mục gốc/);assert.match(blocked,/đã dừng/);assert.doesNotMatch(blocked,/Đang đọc|Đang quét/);
+ assert.match(H.coingeckoScopeState({snapshot,status:{state:'loading'}}),/Đang xác minh/);
+ assert.match(H.coingeckoScopeState({snapshot,status:{state:'collecting',progress:{phase:'catalog_before'}}}),/Đang đọc danh mục gốc/);
+ assert.match(H.coingeckoScopeState({snapshot,status:{state:'paused'}}),/tạm dừng đọc danh mục gốc/);
+});
+test('CoinGecko waiting and final-catalog verification retain completion semantics without claiming an active price scan',()=>{
+ const snapshot={coverage:{scope:'active_catalog_frozen_at_start',frozenCatalogComplete:true,activeAfterCovered:true}},waiting=H.coingeckoScopeState({snapshot,status:{state:'waiting'}});
+ assert.match(waiting,/Đã đọc hết danh mục ban đầu/);assert.match(waiting,/Đang chờ lượt quét kế tiếp/);assert.doesNotMatch(waiting,/Đang quét lần lượt/);
+ assert.match(H.coingeckoScopeState({snapshot:{coverage:{...snapshot.coverage,activeAfterCovered:false}},status:{state:'waiting'}}),/có thay đổi/);
+ const verifying=H.coingeckoScopeState({snapshot,status:{state:'collecting',progress:{phase:'catalog_after'}}});assert.match(verifying,/đang đối chiếu danh mục cuối lượt/);assert.doesNotMatch(verifying,/Đang quét lần lượt/);
+ assert.match(H.coingeckoScopeState({snapshot,status:{state:'idle'}}),/Đang chờ bắt đầu/);
+});
+
 for(const [n,f]of tests){f();console.log('PASS '+n);}console.log(tests.length+' market hub checks passed');
