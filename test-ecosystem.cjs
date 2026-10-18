@@ -16,6 +16,12 @@ test('market percentages retain percent units and missing values remain null', (
   assert.equal(r.return1hPct,.5);assert.equal(r.return1yPct,80);assert.equal(r.return24hPct,2); assert.equal(r.return7dPct,-3); assert.equal(r.return30dPct,null);
   assert.equal(r.priceUsd,100); assert.equal(r.providerUpdatedAt,now-60000); assert.equal(r.key,'coingecko:bitcoin');
 });
+test('market images come only from the returned native asset and official CoinGecko image hosts', () => {
+ const image='https://coin-images.coingecko.com/coins/images/1/small/bitcoin.png?1700000000',row=E.parseMarkets([coin({image})],{now,fetchedAt:now}).rows[0];assert.equal(row.imageUrl,image);assert.equal(row.id,'bitcoin');
+ for(const bad of ['javascript:alert(1)','http://assets.coingecko.com/coins/images/1/small/a.png','https://assets.coingecko.com.evil.test/coins/images/1/small/a.png','https://user@assets.coingecko.com/coins/images/1/small/a.png','https://assets.coingecko.com/other.png'])assert.equal(E.parseMarkets([coin({image:bad})],{now,fetchedAt:now}).rows[0].imageUrl,null);
+ assert.equal(E.parseMarkets([coin()],{now,fetchedAt:now}).rows[0].imageUrl,null);assert.notEqual(E.rowBinding(row),E.rowBinding({...row,imageUrl:null}));
+ const snapshot=JSON.parse(fs.readFileSync(path.join(__dirname,'data/ecosystem-snapshot.json'),'utf8')),old=structuredClone(snapshot);for(const r of old.global.pricedRows)delete r.imageUrl;assert.equal(E.validateSnapshot(old),old);const corrupt=structuredClone(snapshot);corrupt.global.pricedRows[0].imageUrl='https://other.test/logo.png';assert.throws(()=>E.validateSnapshot(corrupt),/market image/);
+});
 test('unpriced, malformed and future data is excluded with explicit errors', () => {
   for (const extra of [{current_price:null},{current_price:0},{current_price:'100'},{total_volume:-1},{last_updated:new Date(now+300001).toISOString()},{last_updated:'bad'}]) {
     const r=E.parseMarkets([coin(extra)],{now,fetchedAt:now}); assert.equal(r.rows.length,0); assert.equal(r.errors.length,1);

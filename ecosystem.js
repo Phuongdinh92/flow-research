@@ -45,6 +45,10 @@
     entries.sort((a,b) => a.id.localeCompare(b.id));
     return { catalogCount: ids.size, contractMappingCount, incompleteMetadataCount, entries };
   }
+  function marketImage(value) {
+    if(typeof value!=='string')return null;
+    try { const u=new URL(value);return u.protocol==='https:'&&['assets.coingecko.com','coin-images.coingecko.com'].includes(u.hostname)&&!u.username&&!u.password&&!u.hash&&/^\/(?:coins|coin-images)\/images\/\d+\//.test(u.pathname)?u.href:null; } catch { return null; }
+  }
   function parseMarkets(raw, { page = 1, fetchedAt = Date.now(), now = Date.now() } = {}) {
     count(page, 'Page'); timestamp(fetchedAt); timestamp(now);
     const rows = [], errors = [], ids = new Set();
@@ -58,7 +62,7 @@
         const providerUpdatedAt = sourceTime(r.last_updated);
         if (providerUpdatedAt > now + 300000) throw Error('Provider timestamp is in the future');
         rows.push({ id, sourceId: 'coingecko', key: 'coingecko:' + id, symbol: text(r.symbol, 'Symbol'), name: text(r.name, 'Coin name'),
-          priceUsd, marketCapUsd: optional(r.market_cap, 'Market cap', true), volume24hUsd: optional(r.total_volume, 'Volume', true),
+          priceUsd, imageUrl: marketImage(r.image), marketCapUsd: optional(r.market_cap, 'Market cap', true), volume24hUsd: optional(r.total_volume, 'Volume', true),
           rank: r.market_cap_rank === null || r.market_cap_rank === undefined ? null : count(r.market_cap_rank, 'Rank'),
           return24hPct: optional(r.price_change_percentage_24h_in_currency === undefined ? r.price_change_percentage_24h : r.price_change_percentage_24h_in_currency, '24h percentage'),
           return1hPct: optional(r.price_change_percentage_1h_in_currency, '1h percentage'),
@@ -123,6 +127,7 @@
       const id = text(r.id, 'Coin ID'); if (ids.has(id)) throw Error('Duplicate normalized coin'); ids.add(id);
       if (r.sourceId !== 'coingecko' || r.key !== 'coingecko:' + id) throw Error('Wrong market identity');
       text(r.symbol, 'Symbol'); text(r.name, 'Name'); numeric(r.priceUsd, 'USD price', true); if (r.priceUsd === 0) throw Error('Zero USD price');
+      if(r.imageUrl!==undefined&&r.imageUrl!==null&&marketImage(r.imageUrl)!==r.imageUrl)throw Error('Invalid CoinGecko market image');
       optional(r.marketCapUsd, 'Market cap', true); optional(r.volume24hUsd, 'Volume', true);
       for (const k of ['return1hPct', 'return24hPct', 'return7dPct', 'return30dPct', 'return1yPct']) optional(r[k], k);
       timestamp(r.providerUpdatedAt); timestamp(r.fetchedAt);
@@ -135,8 +140,14 @@
     return raw;
   }
   const COVERAGE_STATUSES = Object.freeze(['priced', 'no_quote', 'missing', 'invalid', 'error', 'unattempted']);
-  const ROW_BIND_FIELDS = Object.freeze(['id','sourceId','key','symbol','name','priceUsd','marketCapUsd','volume24hUsd','rank','return24hPct','return1hPct','return7dPct','return30dPct','return1yPct','providerUpdatedAt','fetchedAt','sourcePage','sourceBatch','sourceSha256']);
+  const ROW_BIND_FIELDS = Object.freeze(['id','sourceId','key','symbol','name','priceUsd','marketCapUsd','volume24hUsd','rank','return24hPct','return1hPct','return7dPct','return30dPct','return1yPct','providerUpdatedAt','fetchedAt','sourcePage','sourceBatch','sourceSha256','imageUrl']);
   function rowBinding(row) { return JSON.stringify(ROW_BIND_FIELDS.map(k => row[k] === undefined ? null : row[k])); }
+  function matchesRowBinding(row, binding) {
+    if(binding===rowBinding(row))return true;
+    // Pre-image coverage ledgers bound all quote fields but had no image slot.
+    // Accept them only when the normalized row still has no image to authorize.
+    return row.imageUrl==null&&binding===JSON.stringify(ROW_BIND_FIELDS.slice(0,-1).map(k=>row[k]===undefined?null:row[k]));
+  }
   function hash(v, name = 'SHA256') { if (typeof v !== 'string' || !/^[a-f0-9]{64}$/.test(v)) throw Error('Invalid ' + name); return v; }
   function sourceUrl(v) { if (typeof v !== 'string' || v.length > 65536 || !/^https:\/\//.test(v)) throw Error('Invalid source URL'); return v; }
   function requestSource(v, name) {
@@ -246,7 +257,7 @@
     const g=snapshot.global, reference=g.catalogCoverage;
     if (g.rankScope !== 'active_catalog' || !reference || reference.scope !== ledger.scope || reference.generationId !== ledger.generationId || reference.coverageSha256 !== coverageSha256 || reference.complete !== ledger.collection.complete || g.catalogCount !== ledger.counts.catalogCount || g.pricedCount !== ledger.counts.priced || JSON.stringify(g.collection) !== JSON.stringify(ledger.collection)) throw Error('Market snapshot and coverage ledger differ');
     const entries=new Map(ledger.entries.map(e=>[e.id,e]));
-    for (const r of g.pricedRows) { const e=entries.get(r.id); if (!e || e.status !== 'priced' || e.batchId !== r.sourceBatch || e.sourceSha256 !== r.sourceSha256 || e.fetchedAt !== r.fetchedAt || e.rowBinding !== rowBinding(r)) throw Error('Market row differs from coverage evidence'); }
+    for (const r of g.pricedRows) { const e=entries.get(r.id); if (!e || e.status !== 'priced' || e.batchId !== r.sourceBatch || e.sourceSha256 !== r.sourceSha256 || e.fetchedAt !== r.fetchedAt || !matchesRowBinding(r,e.rowBinding)) throw Error('Market row differs from coverage evidence'); }
     const catalogProof=snapshot.provenance.filter(p=>p.id==='coingecko_catalog_before' || p.id==='coingecko_catalog_after');
     for (const [id,p] of [['coingecko_catalog_before',ledger.catalogBefore],['coingecko_catalog_after',ledger.catalogAfter]]) if (!catalogProof.some(q=>q.id===id&&q.sha256===p.sha256&&q.fetchedAt===p.fetchedAt&&q.sourceUrl===p.sourceUrl&&q.recordCount===p.count)) throw Error('Catalog provenance differs');
     for (const b of ledger.batches) if (!snapshot.provenance.some(p=>p.id===b.batchId&&p.sourceUrl===b.sourceUrl&&p.sha256===b.sha256&&p.fetchedAt===b.fetchedAt&&p.recordCount===b.inputCount)) throw Error('Market batch provenance differs');
