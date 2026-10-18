@@ -30,3 +30,5 @@ __pycache__/
 data/research-snapshot.json
 # Full CoinLore catalog is distributed losslessly through verified gzip.
 data/coinlore-market.json
+# Derived dated returns are reproduced from the verified archive; gzip ships exact bytes.
+data/market-windows.json

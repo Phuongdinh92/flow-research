@@ -147,8 +147,9 @@ async function startLive(){
  state.liveInstruments=(state.sources.find(s=>s.sourceId==='binance')?.rows||[]).map(({instrument,base,quote})=>({instrument,base,quote}));launch();
  try{
   const response=await fetch('https://data-api.binance.vision/api/v3/exchangeInfo?permissions=SPOT&showPermissionSets=false',{credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('HTTP '+response.status);
-  const fetchedAt=Date.now(),listed=FlowMarket.registry('binance',await response.json());if(!listed.instruments.length||listed.errors.length)throw Error('Danh mục Binance chưa đủ hợp lệ');
-  state.liveInstruments=listed.instruments;state.liveMetadata={fetchedAt};if(state.liveController)state.liveController.setInstruments(state.liveInstruments);else launch();
+  const fetchedAt=Date.now(),body=await response.json(),listed=FlowMarket.registry('binance',body);if(!listed.instruments.length||listed.errors.length)throw Error('Danh mục Binance chưa đủ hợp lệ');
+  const weight=body.rateLimits?.find(r=>r.rateLimitType==='REQUEST_WEIGHT'&&r.interval==='MINUTE'&&r.intervalNum===1)?.limit;
+  state.liveInstruments=listed.instruments;state.liveMetadata={fetchedAt,...(Number.isSafeInteger(weight)&&weight>0?{requestWeightLimit:weight}:{})};if(state.liveController)state.liveController.setInstruments(state.liveInstruments);else launch();
   renderLiveStatus(state.liveController.snapshot().status);log('Danh mục luồng Binance đã xác nhận: '+listed.instruments.length+' cặp spot/USDT lúc '+date(fetchedAt)+'.');
  }catch(error){state.liveMetadata={error:error.message};renderLiveStatus(state.liveController?.snapshot().status||{state:'blocked',error:error.message});log('Luồng giá: chưa làm mới được danh mục ('+error.message+'); giữ danh mục đã lưu, không thử nguồn thay thế.');}
 }
@@ -235,5 +236,6 @@ setInterval(render,60000);
 $('#source').innerHTML='<option value="all">Tất cả sàn đã kết nối</option>'+SOURCES.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
 FlowUI.getMarketState=()=>({sources:visibleSources().map(s=>({...s,rows:s.rows.map(r=>({...r}))}))});
 FlowUI.getLiveState=()=>({rows:(state.live?.rows||[]).map(r=>({...r})),status:{...(state.live?.status||{})},metadata:{...state.liveMetadata},manualPaused:state.livePaused});
+FlowUI.getInstrumentRegistry=source=>source==='binance'?state.liveInstruments.map(r=>({...r,sourceId:'binance',key:'binance:'+r.instrument})):[];
 initial();const historyFolds=Array.from(document.querySelectorAll('#market details.legacy-reference'));let auxiliaryStarted=false;function startAuxiliary(){if(auxiliaryStarted)return;auxiliaryStarted=true;loadAuxiliary();}for(const fold of historyFolds)fold.addEventListener('toggle',()=>{if(fold.open)startAuxiliary();});if(!historyFolds.length||historyFolds.some(f=>f.open))startAuxiliary();
 }

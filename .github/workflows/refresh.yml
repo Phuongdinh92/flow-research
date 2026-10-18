@@ -1,8 +1,18 @@
 name: Refresh public research data
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Bounded collection profile'
+        required: true
+        default: market
+        type: choice
+        options: [market, daily, context, ledger]
   schedule:
     - cron: '23 */6 * * *'
+    - cron: '41 0 * * *'
+    - cron: '17 2 * * *'
+    - cron: '47 3 * * *'
 permissions:
   contents: write
   pages: write
@@ -24,7 +34,22 @@ jobs:
           key: public-receipts-${{ runner.os }}-${{ github.run_id }}
           restore-keys: public-receipts-${{ runner.os }}-
       - name: Collect public observations
-        run: node refresh_data.cjs
+        id: collect
+        continue-on-error: true
+        env:
+          REQUESTED_PROFILE: ${{ inputs.profile }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          profile="$REQUESTED_PROFILE"
+          if [ -z "$profile" ]; then
+            case "$SCHEDULE" in
+              '41 0 * * *') profile=daily ;;
+              '17 2 * * *') profile=context ;;
+              '47 3 * * *') profile=ledger ;;
+              *) profile=market ;;
+            esac
+          fi
+          node refresh_data.cjs --profile "$profile"
       - name: Verify calculations and publication
         run: node --test test-*.cjs
       - name: Commit coherent public snapshots
@@ -39,3 +64,8 @@ jobs:
             git push
             gh api --method POST repos/${{ github.repository }}/pages/builds
           fi
+      - name: Report collection failure after publishing retained data
+        if: steps.collect.outcome == 'failure'
+        run: |
+          echo 'One or more collectors failed. Verified prior data and the actual failure report were published.'
+          exit 1
