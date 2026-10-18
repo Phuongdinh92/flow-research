@@ -1,0 +1,9 @@
+{
+  "file": "coingecko-20261018-0507.json.gz",
+  "encoding": "gzip",
+  "compressedBytes": 205677,
+  "compressedSha256": "2f6444491314beffa496e4df50ed9d3b33fc31a82bbeeed60cb16f51fe3d1437",
+  "decodedBytes": 1127314,
+  "decodedSha256": "1f365111038c4351dcaadaa35a8d9d38ae0366bbbc1da731ea87806b9654a66f",
+  "responseCount": 5
+}

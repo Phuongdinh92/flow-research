@@ -63,6 +63,7 @@
         if (providerUpdatedAt > now + 300000) throw Error('Provider timestamp is in the future');
         rows.push({ id, sourceId: 'coingecko', key: 'coingecko:' + id, symbol: text(r.symbol, 'Symbol'), name: text(r.name, 'Coin name'),
           priceUsd, imageUrl: marketImage(r.image), marketCapUsd: optional(r.market_cap, 'Market cap', true), volume24hUsd: optional(r.total_volume, 'Volume', true),
+          fdvUsd: optional(r.fully_diluted_valuation, 'FDV', true), circulatingSupply: optional(r.circulating_supply, 'Circulating supply', true), totalSupply: optional(r.total_supply, 'Total supply', true), maxSupply: optional(r.max_supply, 'Max supply', true),
           rank: r.market_cap_rank === null || r.market_cap_rank === undefined ? null : count(r.market_cap_rank, 'Rank'),
           return24hPct: optional(r.price_change_percentage_24h_in_currency === undefined ? r.price_change_percentage_24h : r.price_change_percentage_24h_in_currency, '24h percentage'),
           return1hPct: optional(r.price_change_percentage_1h_in_currency, '1h percentage'),
@@ -129,6 +130,7 @@
       text(r.symbol, 'Symbol'); text(r.name, 'Name'); numeric(r.priceUsd, 'USD price', true); if (r.priceUsd === 0) throw Error('Zero USD price');
       if(r.imageUrl!==undefined&&r.imageUrl!==null&&marketImage(r.imageUrl)!==r.imageUrl)throw Error('Invalid CoinGecko market image');
       optional(r.marketCapUsd, 'Market cap', true); optional(r.volume24hUsd, 'Volume', true);
+      for(const k of ['fdvUsd','circulatingSupply','totalSupply','maxSupply'])optional(r[k],k,true);
       for (const k of ['return1hPct', 'return24hPct', 'return7dPct', 'return30dPct', 'return1yPct']) optional(r[k], k);
       timestamp(r.providerUpdatedAt); timestamp(r.fetchedAt);
     }
@@ -140,13 +142,13 @@
     return raw;
   }
   const COVERAGE_STATUSES = Object.freeze(['priced', 'no_quote', 'missing', 'invalid', 'error', 'unattempted']);
-  const ROW_BIND_FIELDS = Object.freeze(['id','sourceId','key','symbol','name','priceUsd','marketCapUsd','volume24hUsd','rank','return24hPct','return1hPct','return7dPct','return30dPct','return1yPct','providerUpdatedAt','fetchedAt','sourcePage','sourceBatch','sourceSha256','imageUrl']);
+  const ROW_BIND_FIELDS = Object.freeze(['id','sourceId','key','symbol','name','priceUsd','marketCapUsd','volume24hUsd','rank','return24hPct','return1hPct','return7dPct','return30dPct','return1yPct','providerUpdatedAt','fetchedAt','sourcePage','sourceBatch','sourceSha256','imageUrl','fdvUsd','circulatingSupply','totalSupply','maxSupply']);
   function rowBinding(row) { return JSON.stringify(ROW_BIND_FIELDS.map(k => row[k] === undefined ? null : row[k])); }
   function matchesRowBinding(row, binding) {
     if(binding===rowBinding(row))return true;
-    // Pre-image coverage ledgers bound all quote fields but had no image slot.
-    // Accept them only when the normalized row still has no image to authorize.
-    return row.imageUrl==null&&binding===JSON.stringify(ROW_BIND_FIELDS.slice(0,-1).map(k=>row[k]===undefined?null:row[k]));
+    // Only the two historical schemas are accepted, and only when their absent
+    // fields remain absent/null. Older evidence cannot authorize new values.
+    return [19,20].some(length=>ROW_BIND_FIELDS.slice(length).every(k=>row[k]==null)&&binding===JSON.stringify(ROW_BIND_FIELDS.slice(0,length).map(k=>row[k]===undefined?null:row[k])));
   }
   function hash(v, name = 'SHA256') { if (typeof v !== 'string' || !/^[a-f0-9]{64}$/.test(v)) throw Error('Invalid ' + name); return v; }
   function sourceUrl(v) { if (typeof v !== 'string' || v.length > 65536 || !/^https:\/\//.test(v)) throw Error('Invalid source URL'); return v; }
