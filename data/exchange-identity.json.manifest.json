@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "public-data-manifest",
+  "transportVersion": 1,
+  "identity": {
+    "schemaVersion": 1,
+    "kind": "exchange-asset-identity",
+    "provider": "CoinGecko",
+    "exchangeId": "binance"
+  },
+  "payload": {
+    "url": "exchange-identity.json.gz",
+    "compression": "gzip",
+    "bytes": 43753,
+    "decodedBytes": 475733,
+    "sha256": "7dd542a16b2ecaede85be5bd40f5737cafa579dec80c19414ef850152561c20e",
+    "decodedSha256": "4610bb04c560b934ed30c22d4b0033123a52f3a9451daf86594790643bd9964f"
+  }
+}

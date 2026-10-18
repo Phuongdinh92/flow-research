@@ -231,6 +231,7 @@
     host.querySelector('#terminal-study').insertAdjacentHTML('afterend','<article class="terminal-card" id="terminal-derivatives">'+cardHead('07 / DERIVATIVES CONTEXT','Vị thế mở, funding và độ lệch giá')+'<div id="terminal-derivatives-body"></div></article>');
     const $=id=>document.getElementById(id);
     const netFlow=G.FlowTradingVolume?.mount($('market-net-flow'),{onOpen:key=>openToken(key,{mode:'delta',window:30,activate:true})});
+    const advanced=G.FlowAnalysisWorkspace?.mount($('intelligence'),{onOpenToken:key=>openToken(key,{mode:'price',window:180,activate:true})});
     $('terminal-status').insertAdjacentHTML('afterend','<details class="terminal-proof" id="terminal-loading"><summary>Tiến trình nạp dữ liệu</summary><div id="terminal-loading-body"></div></details>');
     const overview=document.createElement('details');overview.className='terminal-research-fold';overview.innerHTML='<summary>Bối cảnh, lực mua và phạm vi bằng chứng</summary>';
     ['terminal-context','terminal-diagnosis','terminal-ladder'].forEach(id=>overview.appendChild($(id)));$('terminal-price').after(overview);
@@ -415,10 +416,10 @@
       state.analyses=R.analyzeAll(state.data,S).analyses.map(a=>({...a,instrumentClass:G.FlowInstrumentClasses?.classify(a.sourceId,a.instrument)}));
       if(!history())state.key=state.analyses.find(a=>a.key==='binance:BTCUSDT')?.key||state.analyses[0]?.key;
       if(!history()||!analysis())throw Error('Bản nến không có cặp hợp lệ để hiển thị.');renderContext();render();state.initialized=true;
-      if(!state.preview)netFlow?.setDataset(result);
+      if(!state.preview){netFlow?.setDataset(result);advanced?.setDataset(result);}
     }
     async function load(){
-      if(state.busy)return;state.loadController?.abort(abortError());const controller=new AbortController(),epoch=++state.loadEpoch;state.loadController=controller;state.busy=true;state.backgroundBusy=true;state.loading={primary:{phase:'start'}};$('terminal-reload').disabled=true;netFlow?.setLoading();renderLoading();
+      if(state.busy)return;state.loadController?.abort(abortError());const controller=new AbortController(),epoch=++state.loadEpoch;state.loadController=controller;state.busy=true;state.backgroundBusy=true;state.loading={primary:{phase:'start'}};$('terminal-reload').disabled=true;netFlow?.setLoading();advanced?.setLoading();renderLoading();
       const current=()=>epoch===state.loadEpoch&&!controller.signal.aborted;
       const update=(key,value)=>{if(!current())return;state.loading[key]={status:'loading',...value};renderLoading();};
       let usedPreview=false,fullReadyResolve,ledgerReadyResolve;
@@ -449,10 +450,11 @@
               catch(reason){result={status:'rejected',reason};}
             }
             if(result.status==='rejected'){state.errors[key]=result.reason.message;state.loading[key]={status:'error',error:result.reason.message};if(key!=='research')state[key]=null;else netFlow?.setError(result.reason.message);}
-            if(key==='research')fullReadyResolve();if(key==='ledger')ledgerReadyResolve();
+            if(key==='research'){fullReadyResolve();if(result.status==='rejected')advanced?.setError(result.reason.message);}if(key==='ledger')ledgerReadyResolve();
+            if(['holderHistory','holders','costReference','ledger','inventory'].includes(key))advanced?.setSupplement(key,state[key],result.status==='rejected'?result.reason.message:null);
             const selected=analysis();if(selected){if(key==='costReference'){let intelligence=null;try{intelligence=I?.analyze?.(history(),{now:Date.now()});}catch(error){state.errors.intelligence=error.message;}renderPrice(history(),selected,intelligence);}else if(['holders','holderHistory'].includes(key))renderHolders(selected);else if(['ledger','inventory'].includes(key)){renderLedger(selected);if(state.ledger)$('terminal-cluster-body').innerHTML=clusterHtml(state.ledger,{tokenAddress:state.ledgerToken});}else if(key==='derivatives')renderDerivatives(selected);else if(key==='study')$('terminal-study-body').innerHTML=state.study?studyHtml(state.study,state.key):empty('Chưa xác minh được nghiên cứu khớp bản nến',state.errors.study);wireChartSamples();}renderLoading();}
         });
-      }catch(error){if(current()){state.errors.primary=error.message;state.loading.primary={status:'error',error:error.message};netFlow?.setError(error.message);if(!state.data)$('terminal-price-body').innerHTML=empty('Không tải được biểu đồ giá',error.message+' · Có thể bấm “Đọc lại bản thu thập” để thử lại.');renderLoading();}}
+      }catch(error){if(current()){state.errors.primary=error.message;state.loading.primary={status:'error',error:error.message};netFlow?.setError(error.message);advanced?.setError(error.message);if(!state.data)$('terminal-price-body').innerHTML=empty('Không tải được biểu đồ giá',error.message+' · Có thể bấm “Đọc lại bản thu thập” để thử lại.');renderLoading();}}
       finally{fullReadyResolve();ledgerReadyResolve();if(current()){state.busy=false;state.backgroundBusy=false;$('terminal-reload').disabled=false;renderLoading();}}
     }
     $('terminal-reload').addEventListener('click',load);load();return {reload:load,state,openToken};

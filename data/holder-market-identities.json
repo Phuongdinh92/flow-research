@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "kind": "holder-market-identity-bindings",
+  "source": {
+    "url": "https://api.coingecko.com/api/v3/coins/list?include_platform=true",
+    "fetchedAt": "2026-10-16T11:24:12.264200+00:00",
+    "httpStatus": 200,
+    "bodySha256": "eaff18a2e484cef04b34d3452a909ae1a02e5b50ecf15a81a188522f6f65e5d2",
+    "bodyEntryCount": 22311,
+    "retainedScope": "Selected catalog records extracted after checking the original body hash; this compact file does not contain the full catalog response and cannot independently reproduce that full-body hash."
+  },
+  "bindings": [
+    {
+      "holderTokenId": "ston",
+      "coinGeckoId": "ston-2",
+      "chain": "ton-mainnet",
+      "master": "0:3690254dc15b2297610cda60744a45f2b710aa4234b89adb630e99d79b01bd4f",
+      "providerPlatform": "the-open-network",
+      "providerAddress": "EQA2kCVNwVsil2EM2mB0SkXytxCqQjS4mttjDpnXmwG9T6bO",
+      "verification": "TON user-friendly address with valid CRC16-XMODEM decodes to the exact configured jetton master. Symbol was not used for matching."
+    },
+    {
+      "holderTokenId": "not",
+      "coinGeckoId": "notcoin",
+      "chain": "ton-mainnet",
+      "master": "0:2f956143c461769579baef2e32cc2d7bc18283f40d20bb03e432cd603ac33ffc",
+      "providerPlatform": "the-open-network",
+      "providerAddress": "EQAvlWFDxGF2lXm67y4yzC17wYKD9A0guwPkMs1gOsM__NOT",
+      "verification": "TON user-friendly address with valid CRC16-XMODEM decodes to the exact configured jetton master. Symbol was not used for matching."
+    },
+    {
+      "holderTokenId": "dogs",
+      "coinGeckoId": "dogs-2",
+      "chain": "ton-mainnet",
+      "master": "0:afc49cb8786f21c87045b19ede78fc6b46c51048513f8e9a6d44060199c1bf0c",
+      "providerPlatform": "the-open-network",
+      "providerAddress": "EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS",
+      "verification": "TON user-friendly address with valid CRC16-XMODEM decodes to the exact configured jetton master. Symbol was not used for matching."
+    }
+  ],
+  "sourceRecords": [
+    {
+      "id": "ston-2",
+      "symbol": "ston",
+      "name": "STON",
+      "platforms": {
+        "the-open-network": "EQA2kCVNwVsil2EM2mB0SkXytxCqQjS4mttjDpnXmwG9T6bO"
+      }
+    },
+    {
+      "id": "notcoin",
+      "symbol": "not",
+      "name": "Notcoin",
+      "platforms": {
+        "the-open-network": "EQAvlWFDxGF2lXm67y4yzC17wYKD9A0guwPkMs1gOsM__NOT"
+      }
+    },
+    {
+      "id": "dogs-2",
+      "symbol": "dogs",
+      "name": "Dogs",
+      "platforms": {
+        "the-open-network": "EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS"
+      }
+    }
+  ],
+  "limitations": [
+    "Identity mapping does not align balance and market-price observation times.",
+    "CEX instruments are not bound by this holder asset identity registry.",
+    "The market cap is the CoinGecko asset aggregate, not the value of a token-specific chain or holder cohort."
+  ],
+  "nativeBindings": [
+    {
+      "holderAssetId": "hedera-hbar",
+      "coinGeckoId": "hedera-hashgraph",
+      "chain": "hedera-mainnet",
+      "assetType": "native",
+      "decimals": 8,
+      "checkedOn": "2026-10-18",
+      "verification": "Manual provider and issuer network identity check: CoinGecko Hedera page lists API ID hedera-hashgraph, hedera.com issuer links and Hashscan explorer; Hedera identifies HBAR as the native network currency. No symbol-only or wrapped-token match.",
+      "sourceUrls": [
+        "https://www.coingecko.com/en/coins/hedera",
+        "https://hedera.com/faq/",
+        "https://docs.hedera.com/api-reference/balances/list-account-balances"
+      ]
+    }
+  ]
+}

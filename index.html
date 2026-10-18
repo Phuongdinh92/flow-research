@@ -16,6 +16,12 @@
 <link rel="stylesheet" href="trading-volume.css?v=9912c">
 <link rel="stylesheet" href="radar-view.css?v=96">
 <link rel="stylesheet" href="focus-ui.css?v=95">
+<link rel="stylesheet" href="strength-overview.css?v=1000">
+<link rel="stylesheet" href="capital-flow-view.css?v=1000">
+<link rel="stylesheet" href="holder-flow-view.css?v=1000">
+<link rel="stylesheet" href="wallet-cohorts.css?v=1000">
+<link rel="stylesheet" href="wallet-strength-view.css?v=1000">
+<link rel="stylesheet" href="analysis-workspace.css?v=1000">
 <script defer src="market.js?v=90"></script>
 <script defer src="charts-core.js?v=9912b"></script>
 <script defer src="charts-view.js?v=98"></script>
@@ -44,7 +50,7 @@
 <script defer src="research-ui.js?v=9912b"></script>
 <script defer src="trading-volume.js?v=9912c"></script>
 <script defer src="intelligence-core.js?v=90"></script>
-<script defer src="holder-history.js?v=90"></script>
+<script defer src="holder-history.js?v=1000"></script>
 <script defer src="chain-ledger.js?v=90"></script>
 <script defer src="inventory-ledger.js?v=94"></script>
 <script defer src="derivatives-core.js?v=93"></script>
@@ -52,17 +58,25 @@
 <script defer src="cost-reference-view.js?v=95"></script>
 <script defer src="live-candle.js?v=96"></script>
 <script defer src="selected-history.js?v=97"></script>
-<script defer src="terminal-ui.js?v=9912b"></script>
+<script defer src="strength-overview.js?v=1000"></script>
+<script defer src="capital-flow-view.js?v=1000"></script>
+<script defer src="holder-flow-view.js?v=1000"></script>
+<script defer src="wallet-cohorts.js?v=1000"></script>
+<script defer src="exchange-identity.js?v=1000"></script>
+<script defer src="wallet-strength-view.js?v=1000"></script>
+<script defer src="analysis-workspace.js?v=1000"></script>
+<script defer src="terminal-ui.js?v=1000"></script>
 <script src="navigation.js?v=93" defer></script>
 <script src="operations.js?v=97" defer></script>
 </head>
 <body class="focused-workspace">
-<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.9.12</span></header>
+<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.10.0</span></header>
 <main>
 <div class="workspace-title"><div><span class="eyebrow">FLOW / MARKET WORKSPACE</span><h1>Biểu đồ giá &amp; thị trường altcoin</h1></div><button id="load">Cập nhật giá các sàn ↗</button></div>
-<nav aria-label="Các mục"><button class="tab active" data-panel="terminal">Biểu đồ giá</button><button class="tab" data-panel="market">Bản đồ altcoin</button><button class="tab" data-panel="netflow">Mua − bán</button><details class="nav-more"><summary>Phân tích khác</summary><div><button class="tab" data-panel="research">Bộ lọc giá &amp; lệnh</button><button class="tab" data-panel="onchain">Ví &amp; giao dịch</button><button class="tab" data-panel="evidence">Độ phủ tính năng</button><button class="tab" data-panel="method">Phương pháp</button></div></details></nav>
+<nav aria-label="Các mục"><button class="tab" data-panel="intelligence">Radar phân tích</button><button class="tab active" data-panel="terminal">Biểu đồ giá</button><button class="tab" data-panel="market">Bản đồ altcoin</button><button class="tab" data-panel="netflow">Mua − bán</button><details class="nav-more"><summary>Phân tích khác</summary><div><button class="tab" data-panel="research">Bộ lọc giá &amp; lệnh</button><button class="tab" data-panel="onchain">Ví &amp; giao dịch</button><button class="tab" data-panel="evidence">Độ phủ tính năng</button><button class="tab" data-panel="method">Phương pháp</button></div></details></nav>
 <details class="source-summary"><summary>Nguồn dữ liệu &amp; độ phủ</summary><div id="status" class="status" role="status" aria-live="polite">Đang kiểm tra dữ liệu…</div><p id="automation-status" class="status" role="status">Đang kiểm tra lịch cập nhật…</p><div class="metrics"><article><span>CẶP / SÀN</span><strong id="count">—</strong><small>Đếm riêng từng cặp/sàn</small></article><article><span>NGUỒN GIÁ</span><strong id="source-count">—</strong><small id="coverage-sub">Chưa kiểm tra kết nối</small></article><article><span>SỰ KIỆN MỚI NHẤT</span><strong id="asof" class="small-value">—</strong><small id="fetched">Thời điểm nguồn</small></article><article><span>PHẠM VI VÍ</span><strong id="wallet-scope" class="small-value">—</strong><small>Chi tiết trong Phân tích khác</small></article></div></details>
 <section id="terminal" class="panel"></section>
+<section id="intelligence" class="panel" hidden></section>
 <section id="netflow" class="panel" hidden><section id="market-net-flow" aria-label="Dòng khớp lệnh Binance theo ngày"></section></section>
 <section id="research" class="panel" hidden>
 <div class="card research-intro"><div class="card-head"><div><div class="eyebrow">BỘ LỌC MÔ TẢ ĐỘC LẬP · BINANCE SPOT / USDT</div><h2>Áp lực mua khi giá chưa tăng nhiều</h2><p class="small">Xem lực khớp lệnh 7D/30D và volume trên toàn danh mục nguồn, rồi kiểm tra biểu đồ dài ngày. Chưa xác nhận ví lớn tích lũy hoặc hiệu quả dự báo.</p></div><button id="research-reload">Đọc lại bản thu thập ↻</button></div>
