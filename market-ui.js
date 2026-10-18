@@ -200,7 +200,7 @@ function stat(label,value){return '<p><span>'+esc(label)+'</span><strong>'+value
 function renderDetail(row,h,warning=''){
  let d,statsError='';const interval=state.detailInterval;
  try{d=FlowCharts.summaryDaily(h.bars,h.asOf,{window:state.detailWindow});}catch(e){statsError=e.message;const last=h.bars.at(-1);d={return7:null,return30:null,turnover20:null,buyShare7:null,current:last?.end===Math.floor(Date.now()/86400000)*86400000-1,latestEnd:last?.end,coverage:{days:h.bars.slice(-state.detailWindow).length}};}
- const aggregate=FlowCharts.aggregateBarsUTC(h.bars,{interval,asOf:h.asOf,windowDays:state.detailWindow});
+ const aggregate=FlowCharts.aggregateBarsUTC(h.bars,{interval,asOf:h.asOf,windowDays:state.detailWindow,windowEnd:h.bars.at(-1).end});
  const averages=state.detailMA?new Map(FlowCharts.dailyMovingAverages(h.bars,{asOf:h.asOf}).series.map(b=>[b.end,b])):new Map();
  const series=aggregate.series.map(b=>({...b,sma20:averages.get(b.end)?.sma20??null,ema50:averages.get(b.end)?.ema50??null,ema200:averages.get(b.end)?.ema200??null}));
  const mode=state.detailMode,hasTaker=aggregate.taker!==null,unit={'1d':'ngày','1w':'tuần','1M':'tháng'}[interval];

@@ -134,10 +134,13 @@
    * Weeks begin Monday 00:00 UTC; months are actual calendar months.
    * Partial boundaries and internal missing days are reported, never filled.
    */
-  function aggregateBarsUTC(bars, { interval = '1d', asOf, now = Date.now(), windowDays = null } = {}) {
+  function aggregateBarsUTC(bars, { interval = '1d', asOf, now = Date.now(), windowDays = null, windowEnd = null } = {}) {
     if (!['1d', '1w', '1M'].includes(interval)) fail('interval', 'Khung nến phải là 1d, 1w hoặc 1M');
     if (windowDays !== null && (!Number.isInteger(windowDays) || windowDays < 1 || windowDays > 3660)) fail('window', 'Cửa sổ ngày không hợp lệ');
     const all = calendarDailyBars(bars, asOf, now), indexed = new Map(all.map(b => [b.time, b]));
+    // A saved-history window can end at its latest actual candle without
+    // pretending that the archive's date is today's clock for freshness.
+    if (windowEnd !== null) { stamp(windowEnd); if (windowEnd % DAY !== DAY - 1 || windowEnd !== all.at(-1).end) fail('window_end', 'Mốc cửa sổ phải là ngày UTC đã đóng cuối của đúng lịch sử'); }
     const firstPeriod = periodStartUTC(all[0].time, interval), lastPeriod = periodStartUTC(all.at(-1).time, interval), aggregated = [], excluded = [];
     for (let start = firstPeriod; start <= lastPeriod; start = nextPeriodUTC(start, interval)) {
       const next = nextPeriodUTC(start, interval), end = next - 1, expectedDays = (next - start) / DAY, constituents = [], missingDays = [];
@@ -153,7 +156,8 @@
     const latestExpectedEnd = periodStartUTC(now, interval) - 1, latestExpectedDailyEnd = Math.floor(now / DAY) * DAY - 1;
     // Whole completed periods that overlap the requested day window are shown.
     // This preserves a whole September candle when a 30-day view starts mid-month.
-    const windowFrom = windowDays === null ? null : Math.floor(now / DAY) * DAY - windowDays * DAY;
+    const windowAnchorEnd = windowEnd === null ? Math.floor(now / DAY) * DAY - 1 : windowEnd;
+    const windowFrom = windowDays === null ? null : windowAnchorEnd + 1 - windowDays * DAY;
     const selected = windowFrom === null ? aggregated : aggregated.filter(b => b.end >= windowFrom);
     const series = derivedFlowSeries(selected), current = !!series.length && series.at(-1).end === latestExpectedEnd;
     const reasons = {}; for (const e of excluded) reasons[e.code] = (reasons[e.code] || 0) + 1;
@@ -163,7 +167,7 @@
     return {
       series, bars: series, excluded, interval, asOf, now, current, stale: !current,
       taker: hasTaker ? { buy: sum('buy'), sell: sum('sell'), delta: sum('delta'), cvd: series.at(-1).cvd } : null,
-      coverage: { availableDays: all.length, completePeriods: aggregated.length, displayedPeriods: series.length, excludedPeriods: excluded.length, reasons, usedDays: series.reduce((s, b) => s + b.days, 0), requestedWindowDays: windowDays, windowFrom, from: series.length ? series[0].time : null, to: series.length ? series.at(-1).end : null, latestDailyEnd: all.at(-1).end, latestExpectedDailyEnd, dailyCurrent: all.at(-1).end === latestExpectedDailyEnd, latestExpectedEnd, current, completeSpan, hasTaker, quotePeriods: series.filter(b => b.quote !== null).length, takerPeriods: series.filter(b => b.buy !== null && b.quote !== null).length, cvdResetAt: series.length ? series[0].time : null, weekStartsOn: interval === '1w' ? 'Monday UTC' : null, partialPeriodPolicy: 'exclude', windowPolicy: 'aggregate full history, then show whole completed periods overlapping the day window' }
+      coverage: { availableDays: all.length, completePeriods: aggregated.length, displayedPeriods: series.length, excludedPeriods: excluded.length, reasons, usedDays: series.reduce((s, b) => s + b.days, 0), requestedWindowDays: windowDays, windowFrom, windowAnchorEnd, windowAnchor: windowEnd === null ? 'current_utc_day' : 'latest_history_close', from: series.length ? series[0].time : null, to: series.length ? series.at(-1).end : null, latestDailyEnd: all.at(-1).end, latestExpectedDailyEnd, dailyCurrent: all.at(-1).end === latestExpectedDailyEnd, latestExpectedEnd, current, completeSpan, hasTaker, quotePeriods: series.filter(b => b.quote !== null).length, takerPeriods: series.filter(b => b.buy !== null && b.quote !== null).length, cvdResetAt: series.length ? series[0].time : null, weekStartsOn: interval === '1w' ? 'Monday UTC' : null, partialPeriodPolicy: 'exclude', windowPolicy: 'aggregate full history, then show whole completed periods overlapping the day window' }
     };
   }
   /** SMA and EMA use full daily history; an EMA starts at its first SMA seed.
