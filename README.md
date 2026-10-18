@@ -1,5 +1,15 @@
 # Flow Research — Market Observatory v0.9.5
 
+## v0.9.12 — completed-day Binance trading flow
+
+`trading-volume.js` uses the existing full, hash-verified research archive after the terminal has loaded it; the one-token startup preview is never a market aggregate. No new collector, external API request, asset mapping or proprietary A1 formula is introduced. The shared cutoff remains the archive's `endTime` (currently 2026-10-16 23:59:59.999 UTC), and the UI explicitly identifies saved history.
+
+The 1D/7D/30D views require exactly N consecutive completed UTC candles at that cutoff. Taker buy is summed quote buy volume; taker sell is total quote minus buy; signed net is buy minus sell. Gross buy/sell KPIs are distinct from the sums of positive token nets and absolute negative token nets. Activity means positive total quote volume; zero values remain valid, while missing bars/taker values are excluded with reasons. KPI scope does not shrink with search, pagination or the bubble display limit. Zero-net instruments remain accessible in the table.
+
+The default filter excludes only the existing source-verified bStocks/stablecoin/EUR classifications; an all-universe option preserves all declared instruments. Unknown classes are retained and explicitly described as not fully classified. The current archive has 511 declared instruments; the default scope has 438, 433 and 418 complete histories for 1D, 7D and 30D respectively, after 73 class exclusions and 0/5/20 short histories. This is dated Binance spot/USDT coverage, not all-market or wallet coverage.
+
+Bubble area is proportional to absolute net USDT with no minimum area or arbitrary weight. Signed labels and accessible tooltips expose actual buy/sell/net, source timestamps and provenance. Both bubbles and table buttons open the exact Binance instrument in the existing daily delta chart, including short histories that cannot satisfy the separate 37-day research filter. No ticker-to-contract inference or live selected-token candle catchup enters these aggregates.
+
 Public site: https://phuongdinh92.github.io/flow-research/
 
 A public, read-only crypto research terminal that places market context, aggressor order flow, actual account balances, receipt-checked DEX acquisitions and an exploratory event study in one application. Each layer keeps its own identity, units, timestamps and coverage. The application does not identify beneficial owners, execute trades or claim a proven predictive edge.

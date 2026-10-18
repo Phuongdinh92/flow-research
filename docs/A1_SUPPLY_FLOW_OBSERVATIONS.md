@@ -104,4 +104,16 @@ These near-time figures are numerically close, but the reference labels alone do
 
 ## Current premium gates
 
-On 2026-10-18 in the same signed-in FREE session, root opened Gem Radar (`/gem-radar?token=bitway`) and MEFI (`/momentum-engine-flow-index`): both showed **Upgrade to ULTRA**. Holder Flow Index (`/charts/holder-flow-index`) showed **Upgrade to PRO**, even though the dashboard groups it under a T3 badge. These are the actual page gate labels; do not assume dashboard T-numbers map one-to-one onto package names. No upgrade was purchased and no gated content was retrieved. The Exclusive Radars menu also lists Token Health Scan, Smart Positioning Radar, Elite Whale Radar, Sector Momentum and Narrative Heat Radar; their presence alone does not reveal their underlying formulas or controls.
+On 2026-10-18 in the same signed-in FREE session, root opened Gem Radar (`/gem-radar?token=bitway`) and MEFI (`/momentum-engine-flow-index`): both showed **Upgrade to ULTRA**. Holder Flow Index (`/charts/holder-flow-index`) showed **Upgrade to PRO**, even though the dashboard groups it under a T3 badge. These are the actual page gate labels; do not assume dashboard T-numbers map one-to-one onto package names. No upgrade was purchased and no gated content was retrieved.
+
+Root subsequently opened every additional entry in the Exclusive Radars menu. All five showed **Upgrade to ULTRA**:
+
+| Page | Visible gate description, paraphrased | Detail access |
+| --- | --- | --- |
+| `/token-health-scan` | Token health and capital-flow analysis | Blocked by subscription |
+| `/charts/smart-positioning-radar?s=ethereum` | Price bands and positions grouped by holding age for ETH | Blocked by subscription |
+| `/charts/elite-whale-radar` | Holdings of labelled funds, individuals, institutions and market makers | Blocked by subscription |
+| `/sector-momentum` | Money Flow Index spikes by crypto sector | Blocked by subscription |
+| `/narrative-heat-radar` | Sector heat, narrative rotation and MEFI state distribution | Blocked by subscription |
+
+Only the menu, route and subscription screen were observed for these five pages. Their underlying formulas, data coverage, thresholds and chart interactions remain unverified; future user-provided video can establish UI behavior but does not by itself establish those equations.

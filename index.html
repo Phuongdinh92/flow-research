@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="charts-view.css?v=98">
 <link rel="stylesheet" href="cost-reference-view.css?v=95">
 <link rel="stylesheet" href="market-hub.css?v=9911">
+<link rel="stylesheet" href="trading-volume.css?v=9912">
 <link rel="stylesheet" href="radar-view.css?v=96">
 <link rel="stylesheet" href="focus-ui.css?v=95">
 <script defer src="market.js?v=90"></script>
@@ -41,6 +42,7 @@
 <script defer src="signal-core.js?v=90"></script>
 <script defer src="instrument-classes.js?v=90"></script>
 <script defer src="research-ui.js?v=96"></script>
+<script defer src="trading-volume.js?v=9912"></script>
 <script defer src="intelligence-core.js?v=90"></script>
 <script defer src="holder-history.js?v=90"></script>
 <script defer src="chain-ledger.js?v=90"></script>
@@ -50,17 +52,18 @@
 <script defer src="cost-reference-view.js?v=95"></script>
 <script defer src="live-candle.js?v=96"></script>
 <script defer src="selected-history.js?v=97"></script>
-<script defer src="terminal-ui.js?v=98"></script>
+<script defer src="terminal-ui.js?v=9912"></script>
 <script src="navigation.js?v=93" defer></script>
 <script src="operations.js?v=97" defer></script>
 </head>
 <body class="focused-workspace">
-<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.9.11</span></header>
+<header><a class="brand" href="./"><span class="mark">F</span>FLOW<span class="wordmark">/ RESEARCH</span></a><span class="badge">Crypto research · v0.9.12</span></header>
 <main>
 <div class="workspace-title"><div><span class="eyebrow">FLOW / MARKET WORKSPACE</span><h1>Biểu đồ giá &amp; thị trường altcoin</h1></div><button id="load">Cập nhật giá các sàn ↗</button></div>
-<nav aria-label="Các mục"><button class="tab active" data-panel="terminal">Biểu đồ giá</button><button class="tab" data-panel="market">Bản đồ altcoin</button><details class="nav-more"><summary>Phân tích khác</summary><div><button class="tab" data-panel="research">Bộ lọc giá &amp; lệnh</button><button class="tab" data-panel="onchain">Ví &amp; giao dịch</button><button class="tab" data-panel="evidence">Độ phủ tính năng</button><button class="tab" data-panel="method">Phương pháp</button></div></details></nav>
+<nav aria-label="Các mục"><button class="tab active" data-panel="terminal">Biểu đồ giá</button><button class="tab" data-panel="market">Bản đồ altcoin</button><button class="tab" data-panel="netflow">Mua − bán</button><details class="nav-more"><summary>Phân tích khác</summary><div><button class="tab" data-panel="research">Bộ lọc giá &amp; lệnh</button><button class="tab" data-panel="onchain">Ví &amp; giao dịch</button><button class="tab" data-panel="evidence">Độ phủ tính năng</button><button class="tab" data-panel="method">Phương pháp</button></div></details></nav>
 <details class="source-summary"><summary>Nguồn dữ liệu &amp; độ phủ</summary><div id="status" class="status" role="status" aria-live="polite">Đang kiểm tra dữ liệu…</div><p id="automation-status" class="status" role="status">Đang kiểm tra lịch cập nhật…</p><div class="metrics"><article><span>CẶP / SÀN</span><strong id="count">—</strong><small>Đếm riêng từng cặp/sàn</small></article><article><span>NGUỒN GIÁ</span><strong id="source-count">—</strong><small id="coverage-sub">Chưa kiểm tra kết nối</small></article><article><span>SỰ KIỆN MỚI NHẤT</span><strong id="asof" class="small-value">—</strong><small id="fetched">Thời điểm nguồn</small></article><article><span>PHẠM VI VÍ</span><strong id="wallet-scope" class="small-value">—</strong><small>Chi tiết trong Phân tích khác</small></article></div></details>
 <section id="terminal" class="panel"></section>
+<section id="netflow" class="panel" hidden><section id="market-net-flow" aria-label="Dòng khớp lệnh Binance theo ngày"></section></section>
 <section id="research" class="panel" hidden>
 <div class="card research-intro"><div class="card-head"><div><div class="eyebrow">BỘ LỌC MÔ TẢ ĐỘC LẬP · BINANCE SPOT / USDT</div><h2>Áp lực mua khi giá chưa tăng nhiều</h2><p class="small">Xem lực khớp lệnh 7D/30D và volume trên toàn danh mục nguồn, rồi kiểm tra biểu đồ dài ngày. Chưa xác nhận ví lớn tích lũy hoặc hiệu quả dự báo.</p></div><button id="research-reload">Đọc lại bản thu thập ↻</button></div>
 <div class="metrics"><article><span>CẶP ĐÃ THỬ TRONG DANH MỤC</span><strong id="research-eligible">—</strong><small>Danh mục Binance spot/USDT tại lần thu thập</small></article><article><span>ĐỦ ĐẦU VÀO SAU LỌC LOẠI</span><strong id="research-valid">—</strong><small>Ít nhất 37 ngày liên tục · đủ taker/volume</small></article><article><span>ĐẠT ĐIỀU KIỆN ĐANG CHỌN</span><strong id="research-matched">—</strong><small>Chưa xác nhận bằng ví · chưa phải lệnh mua</small></article><article><span>NGÀY UTC ĐÃ ĐÓNG CUỐI</span><strong id="research-end" class="research-date">—</strong><small>Không dùng nến ngày đang hình thành</small></article></div>
@@ -109,7 +112,8 @@
 <div class="card prose"><div class="eyebrow">TỪ DỮ LIỆU ĐẾN BẰNG CHỨNG</div><h2>Những biểu đồ nào đã có dữ liệu?</h2><div class="evidence-list"><div><span class="pill positive">Đã có nguồn đo</span><h3>Giá, nến, volume và lực khớp lệnh</h3><p>Bản đồ tổng hợp có phạm vi và trạng thái lượt quét ghi riêng theo CoinGecko ID, có biến động 1H/24H/7D/30D/1Y khi nguồn cung cấp; bản đồ giá/volume bốn sàn; bản đồ tỷ trọng taker mua Binance; nến và volume theo ngày. Với nguồn có taker, có chênh lệch mua/bán chủ động và CVD trong cửa sổ đã chọn.</p></div><div><span class="pill positive">Đã có số dư trong phạm vi nhỏ</span><h3>Lịch sử số dư và giao dịch mua thực</h3><p>HBAR có 30 quan sát ngày, mốc 30D/90D và nhóm holder cố định; TON có top 1.000 theo các lần đọc thật. Mẫu 30 giao dịch UNI/LINK/AAVE đối chiếu receipt, nơi nhận và lịch sử số dư 30 ngày. Bốn địa chỉ nhận đều là hợp đồng; chưa xác minh chủ sở hữu hoặc cá mập.</p></div><div><span class="pill warning">Chưa có mô hình và dữ liệu phù hợp</span><h3>Smart Bands, ASI, MEFI và bản đồ thanh lý</h3><p>Các dải giá vốn on-chain, mô hình chấm điểm và mức thanh lý không thể suy ra từ ticker giá/volume. Chưa xác nhận tương đương A1Radar. Bộ lọc lực mua có nghiên cứu sự kiện, chi phí giả định, đối chứng và các trường hợp thất bại; chưa chứng minh lợi thế dự báo.</p></div></div><h3>Đối chiếu đầy đủ các nhóm biểu đồ bạn gửi</h3><div class="table-scroll"><table class="feature-matrix"><thead><tr><th>Biểu đồ tham chiếu</th><th>Trạng thái trong Flow Research</th><th>Dữ liệu/phương pháp còn cần</th></tr></thead><tbody>
 <tr><td>Bong bóng, giá và volume</td><td>Đã có: USD 1H/24H/7D/30D/1Y theo trường nguồn; bong bóng/cột/top tăng giảm/ngược BTC và bốn sàn USDT</td><td>Độ phủ từng tập được ghi riêng; chưa gộp cùng ticker thành cùng token</td></tr>
 <tr><td>Nến ngày/tuần/tháng, EMA</td><td>Đã có khung UTC; SMA20, EMA50 và EMA200 khi đủ 200 ngày</td><td>Đã có cửa sổ 180/365 ngày; đường MA không phải SmartBands</td></tr>
-<tr><td>Daily Net Order Flow, CVD</td><td>Đã có taker delta Binance theo cặp</td><td>Không xác định danh tính người mua hoặc toàn bộ dòng vốn thị trường</td></tr>
+<tr><td>Daily Net Order Flow, CVD</td><td>Delta/CVD theo cặp và mục Mua − bán: bong bóng, bảng, tổng taker 1D/7D/30D từ nến Binance đã đóng; ghi mốc chốt và số cặp đủ dữ liệu</td><td>Không xác định danh tính người mua hoặc toàn bộ dòng vốn thị trường; bản lưu tách khỏi giá trực tiếp</td></tr>
+<tr><td>Nguồn cung và định giá</td><td>Bảng/popup CoinGecko có vốn hóa, FDV, cung lưu hành/tổng/tối đa và tỷ lệ; giữ nguyên số nguồn, ngày cập nhật và dữ liệu thiếu</td><td>Tỷ lệ cung chưa lưu hành không xác nhận token bị khóa hoặc lịch mở khóa</td></tr>
 <tr><td>Net Buy/Sell theo vùng giá</td><td>Đã có vùng giá mua/bán chủ động của luồng Binance đang quan sát; chưa có lịch sử đủ 1D/7D/30D. Mẫu DEX giữ riêng</td><td>Luồng lưu trong bộ nhớ từ khi mở trang; phải thu thập lịch sử liên tục để có vùng giá đầy đủ nhiều ngày</td></tr>
 <tr><td>Money Flow: MFI Spike, Momentum, Ignition, Blaze, Shark/Whale Action, LNC</td><td>Đã có mốc bất thường volume, momentum và lực mua với công thức công khai; chưa tái tạo tín hiệu A1 hoặc xác nhận Shark/Whale</td><td>Định nghĩa tín hiệu, dữ liệu gốc và quy tắc gán nhãn; không đổi volume spike thành “whale”</td></tr>
 <tr><td>Holder Flow, Holder Momentum, Gini</td><td>Đã có nhóm holder HBAR cố định theo 30 ngày và mốc 30D/90D; TON theo các lần đọc thật. Chưa có Gini toàn bộ holder</td><td>Cần lịch sử dài ngày, độ phủ địa chỉ ngoài top, chủ sở hữu hưởng lợi và quy tắc loại ví sàn/dự án</td></tr>
