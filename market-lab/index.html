@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1120"><title>Flow Research | Market Lab</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,Arial,sans-serif;background:#0b1120;color:#e4ebf8}
+*{box-sizing:border-box}body{margin:0}a{color:#81c6ff}button,select,input{font:inherit}
+button{cursor:pointer}.top{position:sticky;top:0;background:#0b1120ed;border-bottom:1px solid #24344c;backdrop-filter:blur(12px);z-index:4}
+.head{max-width:1320px;margin:auto;padding:14px 22px;display:flex;align-items:center;gap:18px;justify-content:space-between;flex-wrap:wrap}
+.brand{font-size:19px;font-weight:850;letter-spacing:.02em}.brand em{font-size:11px;font-style:normal;color:#92b4cd;display:block;font-weight:500;margin-top:5px}
+nav{display:flex;flex-wrap:wrap;gap:8px}nav button,.button{border:1px solid #344762;background:#101d31;color:#cedbf0;padding:10px 13px;border-radius:9px}
+nav button.active,button.primary{background:#19566a;border-color:#2e99a9;color:#e8fdff}main{max-width:1320px;padding:22px;margin:0 auto}
+h1{font-size:25px;margin:0 0 8px}h2{font-size:16px;margin:0 0 13px}p{color:#9fb1c9;line-height:1.5;margin:7px 0 15px}
+.eyebrow{color:#54d9c1;font-size:11px;letter-spacing:.13em;font-weight:750;margin-bottom:9px}
+.notice{padding:12px 15px;border:1px solid #685b37;background:#292619;color:#e4ca80;border-radius:9px;font-size:13px;margin-bottom:18px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 22px}
+.card,.panel{background:#111d30;border:1px solid #263953;border-radius:14px;padding:16px}.kpi{font-size:28px;font-weight:800;color:#f6faff;letter-spacing:-.03em}
+.caption{font-size:12px;color:#8fa7c2;margin-top:6px}.muted{color:#9aaec5;font-size:12px}
+.layout{display:grid;grid-template-columns:1.55fr 1fr;gap:14px;margin-bottom:16px}.layout2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.panel{min-width:0}.panel h2{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.indicator{font-size:11px;color:#70d6cb;padding:5px 9px;background:#173837;border-radius:6px}.red{color:#ff8d9b}.green{color:#69dbb4}.yellow{color:#ecc783}
+.filters{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:14px}
+input,select{background:#0c1627;border:1px solid #34445b;border-radius:9px;color:#e2edff;padding:10px 12px;min-width:100px}
+input{min-width:200px;max-width:100%}.tablewrap{overflow:auto;max-height:560px}
+table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}th{font-size:11px;color:#8da7c2;text-align:left;background:#142136;position:sticky;top:0}
+td,th{padding:10px;border-bottom:1px solid #203248}tr[data-key]{cursor:pointer}tr[data-key]:hover{background:#1a3047}
+svg{width:100%;height:auto;display:block}svg text{fill:#8ea4ba;font:11px Inter,Arial}
+.chartbox{background:#0b1728;border:1px solid #263853;border-radius:10px;overflow:hidden;margin-top:12px}
+.pill{display:inline-block;color:#a0d9e5;background:#183c4b;padding:5px 7px;border-radius:5px;font-size:11px}
+.btnrow{display:flex;flex-wrap:wrap;gap:10px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #70e2f0;outline-offset:3px}
+.empty{padding:28px 12px;color:#9bb1c9;text-align:center}
+.meta{font-size:12px;border-top:1px solid #2b3d57;padding-top:12px;line-height:1.7;color:#a8b9c9}
+section[hidden]{display:none!important}
+footer{padding:40px 0 16px;color:#839cb8;font-size:12px}
+@media(max-width:830px){.cards{grid-template-columns:repeat(2,1fr)}.layout,.layout2{grid-template-columns:1fr}.head{padding:12px}.kpi{font-size:21px}main{padding:14px}.brand{font-size:17px}nav button{padding:8px 10px;font-size:12px}}
+</style></head><body>
+<div class="top"><div class="head"><div class="brand">FLOW RESEARCH <em>MARKET LAB · bản xem online trên GitHub Pages</em></div>
+<nav><button data-tab="summary" class="active">Summary</button><button data-tab="flow">Money Flow</button><button data-tab="absorption">Gom sớm · nghiên cứu</button><button data-tab="methods">Nguồn &amp; phương pháp</button></nav></div></div>
+<main>
+<div class="notice" id="status" role="status">Đang tải dữ liệu lịch sử đã lưu trên GitHub…</div>
+<section data-section="summary"><div class="eyebrow">MARKET VIEW / EXCHANGE TAKER DATA</div><h1>Summary Market</h1>
+<p>Độ rộng thị trường, áp lực lệnh mua/bán và các biến động. Đây là bộ số đo công khai của Flow Research, <strong>không phải ASI / Money Flow độc quyền của A1</strong>.</p>
+<div class="cards"><div class="card"><div class="kpi" id="kCount">—</div><div class="caption">Cặp có dữ liệu Binance</div></div>
+<div class="card"><div class="kpi" id="kUp">—</div><div class="caption">Cặp tăng giá 7 ngày</div></div>
+<div class="card"><div class="kpi" id="kNet">—</div><div class="caption">Tổng net taker 7D, USDT</div></div>
+<div class="card"><div class="kpi" id="kReady">—</div><div class="caption">Cặp taker mua &gt; 52% (7D)</div></div></div>
+<div class="layout"><div class="panel"><h2>Bản đồ vốn hóa thay thế: giá 30D × tỷ trọng mua <span class="indicator">THEO CẶP, KHÔNG PHẢI ASI</span></h2><div id="bubble" class="chartbox"></div><p class="muted">Trục ngang: lợi suất 30D, trục dọc: tỷ trọng mua chủ động 7D. Kích thước: thanh khoản 7D. Bấm vào vòng tròn để mở coin.</p></div>
+<div class="panel"><h2>Top biến động 7 ngày</h2><div id="movers" class="tablewrap"></div></div></div>
+<div class="panel"><h2>Toàn bộ coin trong phạm vi dữ liệu <span class="indicator">BẤM TÊN ĐỂ MỞ MONEY FLOW</span></h2>
+<div class="filters"><input id="marketSearch" placeholder="Tìm BTC, NEAR, LINK, STRK…" aria-label="Tìm coin"><select id="marketSort"><option value="net">Net taker 7D</option><option value="return7">Giá 7D</option><option value="quote">Volume 7D</option><option value="buy">Taker mua 7D</option></select></div>
+<div id="marketTable" class="tablewrap"></div></div>
+</section>
+<section data-section="flow" hidden><div class="eyebrow">SELECTED INSTRUMENT / HISTORICAL REPLAY</div><h1>Money Flow và cấu trúc giá</h1>
+<div class="filters"><label>Chọn coin <select id="coin"></select></label><button id="loadHistory" class="primary">Tải lịch sử chi tiết 511 cặp</button></div>
+<div class="cards"><div class="card"><div class="kpi" id="fPrice">—</div><div class="caption">Giá đóng gần nhất</div></div><div class="card"><div class="kpi" id="fBuy">—</div><div class="caption">Taker mua 7D</div></div><div class="card"><div class="kpi" id="fNet">—</div><div class="caption">Mua chủ động − bán chủ động 7D</div></div><div class="card"><div class="kpi" id="fReturn">—</div><div class="caption">Biến động giá 30D</div></div></div>
+<div class="panel"><h2 id="chartTitle">Biểu đồ lịch sử <span class="indicator">NẾN ĐÃ ĐÓNG UTC</span></h2><div id="priceChart" class="chartbox"><div class="empty">Bấm tải lịch sử để xem đường giá và EMA.</div></div>
+<p class="muted" id="chartNote">Chỉ đánh dấu những chỉ số có dữ liệu; không gắn hình cá mập cho một giao dịch chưa chứng minh được chủ sở hữu.</p></div>
+<div class="layout2" style="margin-top:16px"><div class="panel"><h2>Money Flow theo ngày</h2><div id="flowChart" class="chartbox"><div class="empty">Chưa tải lịch sử.</div></div><p class="muted">Cột xanh = net taker dương; cột đỏ = âm. Đây là lệnh mua/bán chủ động trên sàn, không phải cá mập tích lũy.</p></div>
+<div class="panel"><h2>Bằng chứng mua và còn giữ</h2><div class="empty" id="walletStatus">Chưa có lịch sử ví/chủ thể được xác minh cho tất cả cặp giao dịch. Không tự dựng dấu 🦈/🐋 từ volume.</div><div id="instrumentMeta" class="meta"></div></div></div>
+</section>
+<section data-section="absorption" hidden><div class="eyebrow">EARLY SETUP / VALIDATION REQUIRED</div><h1>Giữ giá khi bán chủ động</h1><p>Tìm trường hợp giá chưa chạy xa, bán chủ động nhiều ngày nhưng giá còn giữ nền. <strong>Đây là giả thuyết hấp thụ, không phải xác nhận cá mập gom hay khuyến nghị mua.</strong></p>
+<div class="panel"><div class="btnrow"><button id="runScan" class="primary">Quét các cặp có lịch sử</button><span class="pill">Không yêu cầu volume &gt; 1,5×</span><span class="pill">Không yêu cầu breakout</span><span class="pill">Bảo toàn ngày nguồn</span></div><p id="scanStatus" class="muted">Cần tải kho nến lịch sử trước khi quét.</p><div id="scanTable" class="tablewrap"></div></div>
+<div class="panel" style="margin-top:16px"><h2>Tiêu chuẩn tính, không phải thuật toán A1</h2><p class="muted">Kiểm tra 37 ngày liền: 7D giá trong ±5%, 30D từ −20% đến +15%, biên giá 7D ≤20%, ròng taker bán ít nhất 1% volume, ít nhất 4/7 ngày bán chủ động, volume/nền ≤1,5 và thanh khoản ≥100.000 USDT/ngày. Nếu thiếu ngày hoặc thiếu taker mua, không tạo tín hiệu.</p><p class="muted">Những điều kiện này được dùng cho nghiên cứu; thử nghiệm hồi cứu của phiên trước chưa chứng minh lợi thế vượt đối chứng. Không trộn tín hiệu lịch sử thành tín hiệu hiện tại.</p></div>
+</section>
+<section data-section="methods" hidden><div class="eyebrow">DATA QUALITY</div><h1>Nguồn, thời gian và phạm vi</h1><div class="layout2">
+<div class="panel"><h2>Dữ liệu đang đọc</h2><p>Nguồn: <a href="../data/flow-snapshot.json" target="_blank" rel="noopener">Binance flow snapshot</a>, <a href="../data/research-manifest.json" target="_blank" rel="noopener">manifest kiểm tra nến</a>, <a href="../data/research-snapshot.json.gz" target="_blank" rel="noopener">nến gốc đã nén</a>.</p><p id="scopeText"></p></div>
+<div class="panel"><h2>Các nhãn chưa được phép thay thế</h2><p>Net taker ≠ dòng tiền cá mập. Phân loại giao dịch lớn ≠ nhận diện chủ thể. Hấp thụ bán ≠ chắc chắn tăng giá. Dải phân vị MVRV ≠ Balance/Undervalue/Diamond của A1.</p><p><a href="https://github.com/Phuongdinh92/flow-research" target="_blank" rel="noopener">Repo mã nguồn GitHub</a></p></div></div>
+</section>
+<footer>FLOW RESEARCH MARKET LAB · GitHub Pages · Chỉ dùng dữ liệu lịch sử, chưa phải feed thời gian thực. Dự án này không thay thế bản Sites riêng tư và không chứa dữ liệu ví cá mập được xác minh trên toàn thị trường.</footer>
+</main>
+<script>
+"use strict";
+const DAY=86400000;
+let rows=[], rowByKey=new Map(), archive=null, lastSelection="binance:BTCUSDT", view="summary", scanCache=null;
+const el=id=>document.getElementById(id);
+const finite=n=>typeof n==="number"&&Number.isFinite(n);
+const esc=x=>String(x??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const num=(n,d=2)=>finite(n)?n.toLocaleString("vi-VN",{maximumFractionDigits:d}):"—";
+const fmtPrice=n=>finite(n)?num(n,n<.001?8:n<1?5:n<100?3:2):"—";
+const pct=(n,d=1)=>finite(n)?(n>0?"+":"")+num(n*100,d)+"%":"—";
+const compact=n=>!finite(n)?"—":Math.abs(n)>=1e9?num(n/1e9,2)+"B":Math.abs(n)>=1e6?num(n/1e6,2)+"M":Math.abs(n)>=1e3?num(n/1e3,1)+"K":num(n,0);
+const date=t=>finite(t)?new Date(t).toISOString().slice(0,10):"—";
+const net=r=>finite(r.quote7)&&finite(r.buyQuote7)?2*r.buyQuote7-r.quote7:null;
+const color=n=>n>0?"green":n<0?"red":"";
+function status(s,isError=false){el("status").textContent=s;el("status").style.borderColor=isError?"#a85462":"#685b37";}
+function navigate(t){view=t;document.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));document.querySelectorAll("[data-section]").forEach(x=>x.hidden=x.dataset.section!==t);if(t==="flow")drawDetail();if(t==="summary")drawSummary();}
+document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>navigate(b.dataset.tab)));
+function openCoin(key){lastSelection=key;el("coin").value=key;navigate("flow");}
+function cellRow(r){return "<tr data-key=\""+esc(r.key)+"\"><td><b>"+esc(r.base)+"</b> <small>Binance</small></td><td>"+fmtPrice(r.close)+"</td><td class=\""+color(r.return7)+"\">"+pct(r.return7)+"</td><td>"+pct(r.return30)+"</td><td>"+pct(r.buyShare7)+"</td><td class=\""+color(net(r))+"\">"+compact(net(r))+"</td><td>"+compact(r.quote7)+"</td></tr>";}
+function attachRows(root){root.querySelectorAll("tr[data-key]").forEach(tr=>tr.addEventListener("click",()=>openCoin(tr.dataset.key)));}
+function drawSummary(){
+if(!rows.length)return; const valid=rows.filter(r=>finite(r.return7)),up=valid.filter(r=>r.return7>0).length;
+el("kCount").textContent=num(rows.length,0);el("kUp").textContent=num(up,0)+" / "+num(valid.length,0);
+let totalNet=rows.reduce((s,r)=>s+(net(r)||0),0),buy=rows.filter(r=>r.buyShare7>.52).length;
+el("kNet").textContent=compact(totalNet);el("kNet").className="kpi "+color(totalNet);el("kReady").textContent=num(buy,0);
+const top=[...valid].sort((a,b)=>b.return7-a.return7).slice(0,14);
+el("movers").innerHTML="<table><thead><tr><th>Coin</th><th>7D</th><th>Mua 7D</th></tr></thead><tbody>"+top.map(r=>"<tr data-key=\""+esc(r.key)+"\"><td><b>"+esc(r.base)+"</b></td><td class=\"green\">"+pct(r.return7)+"</td><td>"+pct(r.buyShare7)+"</td></tr>").join("")+"</tbody></table>";
+attachRows(el("movers"));drawBubbles();drawTable();
+}
+function drawBubbles(){
+const root=el("bubble");root.innerHTML="";const pts=rows.filter(r=>finite(r.return30)&&finite(r.buyShare7));
+if(!pts.length){root.innerHTML="<p class=\"empty\">Thiếu dữ liệu phân bố.</p>";return;}
+const ns="http://www.w3.org/2000/svg", svg=document.createElementNS(ns,"svg");svg.setAttribute("viewBox","0 0 860 355");svg.setAttribute("role","img");svg.setAttribute("aria-label","Biểu đồ phân tán biến động giá 30 ngày và tỷ trọng mua chủ động 7 ngày");
+const line=(x1,y1,x2,y2,c)=>{const e=document.createElementNS(ns,"line");for(const [k,v]of Object.entries({x1,y1,x2,y2,stroke:c||"#283c54","stroke-width":1}))e.setAttribute(k,v);svg.appendChild(e)};
+const label=(x,y,t)=>{const e=document.createElementNS(ns,"text");e.setAttribute("x",x);e.setAttribute("y",y);e.textContent=t;svg.appendChild(e)};
+for(let i=0;i<=5;i++){const y=302-i*49;line(56,y,831,y);label(5,y+4,num(i*20,0)+"%");}for(let i=0;i<=5;i++){const x=56+i*155;line(x,35,x,302);label(x,326,num(-40+i*20,0)+"%");}
+label(56,17,"TỶ TRỌNG MUA CHỦ ĐỘNG 7 NGÀY");label(440,347,"BIẾN ĐỘNG GIÁ 30 NGÀY");
+for(const r of pts){const x=56+Math.max(0,Math.min(1,(r.return30+.4)/1))*775;const y=302-r.buyShare7*245;const radius=2+Math.min(13,Math.sqrt(Math.max(0,r.quote7||0))/9000);
+const c=document.createElementNS(ns,"circle");for(const [k,v]of Object.entries({cx:x,cy:y,r:radius,fill:net(r)>0?"#43c6b1":"#bd687d",opacity:.62,stroke:"#233a50","stroke-width":.4}))c.setAttribute(k,v);
+c.style.cursor="pointer";const title=document.createElementNS(ns,"title");title.textContent=r.base+" • "+pct(r.return30)+" giá 30D • "+pct(r.buyShare7)+" taker mua 7D • "+compact(net(r))+" USDT";c.appendChild(title);c.addEventListener("click",()=>openCoin(r.key));svg.appendChild(c);}
+root.appendChild(svg);
+}
+function drawTable(){let q=el("marketSearch").value.trim().toUpperCase(),sort=el("marketSort").value;
+let found=rows.filter(r=>r.base.toUpperCase().includes(q)),v=sort==="net"?net:sort==="return7"?r=>r.return7:sort==="quote"?r=>r.quote7:r=>r.buyShare7;
+found.sort((a,b)=>(v(b)??-1e99)-(v(a)??-1e99));el("marketTable").innerHTML="<p class=\"muted\">"+num(found.length,0)+" cặp tìm thấy; hiện 80 dòng đầu. Chọn coin để mở hồ sơ.</p><table><thead><tr><th>Cặp</th><th>Giá</th><th>7D</th><th>30D</th><th>Taker mua</th><th>Net taker USDT</th><th>Volume USDT</th></tr></thead><tbody>"+found.slice(0,80).map(cellRow).join("")+"</tbody></table>";attachRows(el("marketTable"));}
+el("marketSearch").addEventListener("input",drawTable);el("marketSort").addEventListener("change",drawTable);el("coin").addEventListener("change",e=>{lastSelection=e.target.value;drawDetail()});
+const ns="http://www.w3.org/2000/svg";
+function nodeSvg(tag,attrs){const e=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))e.setAttribute(k,String(v));return e;}
+function plotLines(bars){const svg=nodeSvg("svg",{viewBox:"0 0 920 332",role:"img","aria-label":"Đường giá đóng, EMA50 và EMA200 trong 120 phiên lịch sử"}),last=bars.slice(-120);
+const max=Math.max(...last.map(x=>x.high)),min=Math.min(...last.map(x=>x.low)),hi=max*1.02,lo=Math.max(0,min*.97),x=i=>56+i*826/Math.max(1,last.length-1),y=p=>285-(p-lo)/(hi-lo)*235;
+for(let i=0;i<=5;i++){let h=285-i*47;svg.appendChild(nodeSvg("line",{x1:56,y1:h,x2:884,y2:h,stroke:"#2d4058"}));const t=nodeSvg("text",{x:3,y:h+4});t.textContent=fmtPrice(lo+(hi-lo)*i/5);svg.appendChild(t);}
+const makePath=(seq,stroke,width)=>{let str="";seq.forEach((p,i)=>{if(finite(p))str+=(i===0||!finite(seq[i-1])?"M":"L")+x(i).toFixed(2)+" "+y(p).toFixed(2)+" ";});svg.appendChild(nodeSvg("path",{d:str,fill:"none",stroke,"stroke-width":width,"stroke-linejoin":"round"}));};
+const closed=last.map(b=>b.close);makePath(closed,"#e7f4ff",2.25);
+const closes=bars.map(b=>b.close);function emaSeries(n){let prev=null,arr=[];for(let i=0;i<closes.length;i++){if(i+1<n){arr.push(null);continue;}if(i+1===n)prev=closes.slice(0,n).reduce((a,b)=>a+b,0)/n;else prev=closes[i]*(2/(n+1))+prev*(1-2/(n+1));arr.push(prev);}return arr.slice(-120);}
+makePath(emaSeries(50),"#71d6b7",1.9);makePath(emaSeries(200),"#dcaa68",1.9);
+const notes=[["Giá","#e7f4ff"],["EMA50","#71d6b7"],["EMA200","#dcaa68"]];notes.forEach((p,i)=>{let t=nodeSvg("text",{x:56+i*160,y:310,fill:p[1]});t.textContent="● "+p[0];svg.appendChild(t);});
+return svg;}
+function plotFlow(bars){const svg=nodeSvg("svg",{viewBox:"0 0 920 242",role:"img","aria-label":"Net taker lịch sử từng ngày 90 phiên"}),rows=bars.slice(-90),values=rows.map(b=>finite(b.quote)&&finite(b.buy)?2*b.buy-b.quote:null);
+let max=Math.max(1,...values.filter(finite).map(Math.abs)),x=i=>56+i*830/Math.max(1,rows.length),center=108;
+svg.appendChild(nodeSvg("line",{x1:55,y1:center,x2:890,y2:center,stroke:"#53647a"}));
+values.forEach((v,i)=>{if(!finite(v))return;let height=Math.abs(v)/max*90;svg.appendChild(nodeSvg("rect",{x:x(i),y:v>0?center-height:center,width:Math.max(2,830/rows.length-2),height:Math.max(1,height),fill:v>=0?"#39bba7":"#df7a91"}));});
+const t=nodeSvg("text",{x:52,y:226});t.textContent="DỮ LIỆU LỊCH SỬ • MUA CHỦ ĐỘNG − BÁN CHỦ ĐỘNG (USDT)";svg.appendChild(t);return svg;}
+function candleFor(k){const h=archive?.histories?.[k];if(!h)return null;return Array.isArray(h.bars)?h.bars:null;}
+function drawDetail(){if(!rows.length)return;const r=rowByKey.get(lastSelection)||rows[0];if(!r)return;
+el("coin").value=r.key;el("fPrice").textContent=fmtPrice(r.close);el("fBuy").textContent=pct(r.buyShare7);let n=net(r);el("fNet").textContent=compact(n);el("fNet").className="kpi "+color(n);el("fReturn").textContent=pct(r.return30);
+el("chartTitle").textContent="Lịch sử "+r.base+" · Binance USDT";const bars=candleFor(r.key);el("priceChart").innerHTML="";el("flowChart").innerHTML="";
+if(bars&&bars.length){el("priceChart").appendChild(plotLines(bars));el("flowChart").appendChild(plotFlow(bars));el("chartNote").textContent="Nến đã đóng UTC; độ dài "+num(bars.length,0)+" ngày. EMA tính từ nến có trong kho. Không có các dải A1 nếu thiếu dữ liệu on-chain phù hợp.";}
+else{el("priceChart").innerHTML="<div class=\"empty\">Chưa tải kho nến dài. Bấm nút “Tải lịch sử chi tiết 511 cặp” để xem biểu đồ của coin này.</div>";el("flowChart").innerHTML="<div class=\"empty\">Chưa có nến theo ngày.</div>";}
+el("walletStatus").textContent="Chưa có bằng chứng chủ sở hữu, giao dịch mua rồi còn giữ, hoặc dữ liệu nhóm ví được xác minh cho "+r.base+" trong kho này. Không vẽ hình cá mập để tránh hiểu nhầm.";
+el("instrumentMeta").innerHTML="Tài sản: <b>"+esc(r.base)+"</b> · Cặp: <b>"+esc(r.instrument)+"</b><br>Thời điểm của chỉ số 7D: "+date(r.end)+" UTC<br>Nguồn: Binance Spot · <a href=\"../data/flow-snapshot.json\" target=\"_blank\">bản ghi lịch sử</a> · Không live.<br>Chỉ số: taker mua 7D "+pct(r.buyShare7)+" · net taker "+compact(net(r))+" USDT.";}
+async function loadHistory(){if(archive)return archive;let btn=el("loadHistory");btn.disabled=true;btn.textContent="Đang kiểm chứng nến…";
+try{status("Đang tải manifest và nến lịch sử đã lưu (khoảng 6 MB).");const m=await(await fetch("../data/research-manifest.json",{cache:"no-store"})).json();
+if(m.kind!=="cex-research-manifest"||m.sourceId!=="binance"||m.snapshot?.compression!=="gzip")throw Error("Manifest khác phương pháp đã biết");
+const response=await fetch("../data/research-snapshot.json.gz",{cache:"no-store"});if(!response.ok)throw Error("HTTP "+response.status);let bytes=await response.arrayBuffer();
+if(bytes.byteLength!==m.snapshot.bytes)throw Error("Độ dài dữ liệu sai");
+const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(v=>v.toString(16).padStart(2,"0")).join("");
+if(digest!==m.snapshot.sha256)throw Error("Mã băm SHA-256 không khớp");
+if(typeof DecompressionStream!=="function")throw Error("Trình duyệt không hỗ trợ giải nén gzip");
+let raw=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text(),parsed=JSON.parse(raw);
+if(parsed.kind!=="cex-research"||parsed.sourceId!=="binance"||!parsed.histories||Object.keys(parsed.histories).length!==m.sourceCoverage.completed)throw Error("Dữ liệu không khớp manifest");
+archive=parsed;status("Đã kiểm chứng SHA-256 và tải "+num(Object.keys(parsed.histories).length,0)+" lịch sử, kết thúc "+m.lastClosedDay+" UTC. Không phải dữ liệu mới.");btn.textContent="Đã tải nến lịch sử";drawDetail();return archive;
+}catch(err){status("Không tải được kho nến: "+err.message,true);btn.textContent="Thử tải lại nến";btn.disabled=false;throw err;}}
+el("loadHistory").addEventListener("click",()=>loadHistory().catch(()=>{}));
+function measures(b){if(!b||b.length<37)return null;let s=b.slice(-37),q=s.slice(-7),old=s.slice(0,30),ret7=q[q.length-1].close/s[s.length-8].close-1,ret30=s[s.length-1].close/s[s.length-31].close-1;
+if(!q.every(x=>finite(x.buy)&&finite(x.quote))||!old.every(x=>finite(x.quote)))return null;
+let vol=q.reduce((n,x)=>n+x.quote,0),prior=old.reduce((n,x)=>n+x.quote,0),buy=q.reduce((n,x)=>n+x.buy,0),net7=2*buy-vol,ratio=(vol/7)/(prior/30),range=Math.max(...q.map(x=>x.high))/Math.min(...q.map(x=>x.low))-1,sell=q.filter(x=>x.buy*2<x.quote).length;
+let pass=vol>700000&&ret7>=-.05&&ret7<=.05&&ret30>=-.2&&ret30<=.15&&range<=.2&&net7/vol<=-.01&&sell>=4&&ratio<=1.5;
+return {ret7,ret30,net7,quote7:vol,sell,ratio,pass,asOf:q[q.length-1].end};}
+function runScan(){if(!archive){el("scanStatus").textContent="Đang tải nến…";loadHistory().then(runScan).catch(e=>el("scanStatus").textContent=e.message);return;}
+let list=[];for(const [key,h]of Object.entries(archive.histories)){const m=measures(h.bars);if(m?.pass)list.push({key,base:h.base,...m});}
+list.sort((a,b)=>a.net7/a.quote7-b.net7/b.quote7);scanCache=list;
+el("scanStatus").textContent="Đã kiểm "+num(Object.keys(archive.histories).length,0)+" lịch sử trong bản lưu, có "+num(list.length,0)+" trường hợp theo điều kiện mô tả. Không có xác nhận cá mập. Kết quả lịch sử không phải cảnh báo hôm nay.";
+el("scanTable").innerHTML="<table><thead><tr><th>Cặp</th><th>7D</th><th>30D</th><th>Net taker 7D</th><th>Volume / nền</th><th>Ngày bán</th><th>Ngày cuối</th></tr></thead><tbody>"+list.slice(0,100).map(r=>"<tr data-key=\""+esc(r.key)+"\"><td>"+esc(r.base)+"</td><td>"+pct(r.ret7)+"</td><td>"+pct(r.ret30)+"</td><td>"+compact(r.net7)+"</td><td>"+num(r.ratio,2)+"×</td><td>"+num(r.sell,0)+"/7</td><td>"+date(r.asOf)+"</td></tr>").join("")+"</tbody></table>";attachRows(el("scanTable"));}
+el("runScan").addEventListener("click",runScan);
+async function init(){
+try{const response=await fetch("../data/flow-snapshot.json",{cache:"no-store"});if(!response.ok)throw Error("HTTP "+response.status);const d=await response.json();
+if(d.schemaVersion!==1||d.sourceId!=="binance"||!Array.isArray(d.records))throw Error("Sai schema dữ liệu");rows=d.records.filter(r=>r.key==="binance:"+r.instrument&&r.quote==="USDT"&&finite(r.close));rowByKey=new Map(rows.map(r=>[r.key,r]));
+const options=[...rows].sort((a,b)=>a.base.localeCompare(b.base)).map(r=>"<option value=\""+esc(r.key)+"\">"+esc(r.base)+" · Binance</option>").join("");el("coin").innerHTML=options;
+if(!rowByKey.has(lastSelection))lastSelection=rows[0]?.key;el("coin").value=lastSelection;
+el("scopeText").textContent="Snapshot: "+date(d.asOf)+" UTC. "+rows.length+" cặp. Dòng lệnh spot chỉ từ Binance; chưa gồm toàn thị trường hoặc chủ thể on-chain. Không dùng dữ liệu này để chứng minh Whale/ASI của A1.";
+status("Đã tải "+num(rows.length,0)+" cặp Binance. NGÀY DỮ LIỆU "+date(d.asOf)+" UTC — đây là bản lưu lịch sử, KHÔNG LIVE. Chọn coin để xem.");drawSummary();drawDetail();}
+catch(err){status("Không tải được dữ liệu từ GitHub: "+err.message,true);el("marketTable").innerHTML="<div class=\"empty\">Kiểm tra GitHub Pages có đang phục vụ ../data/flow-snapshot.json không.</div>";}}
+init();
+</script></body></html>
