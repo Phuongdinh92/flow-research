@@ -1,0 +1,22 @@
+name: Review publish check
+on:
+  push:
+    paths:
+      - '.github/workflows/review-publish-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify Pages and source asset HTTP availability
+        shell: bash
+        run: |
+          set -eu
+          for url in 'https://phuongdinh92.github.io/flow-research/' 'https://flow-research-private.phuongdinh1811.chatgpt.site/money-flow-view.js'; do
+            printf '%s\n' "$url"
+            curl -sS -L --max-time 30 -o /tmp/probe-resource -w 'HTTP %{http_code}; type %{content_type}; bytes %{size_download}\n' "$url" || true
+            sha256sum /tmp/probe-resource || true
+          done
